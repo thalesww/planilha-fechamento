@@ -268,6 +268,14 @@ function toMoneyFromNumber(value) {
   return value > 0 ? formatNumber(value) : "";
 }
 
+function formatOcrNumeric(value) {
+  if (!value) return "";
+  const digits = String(value).replace(/\D/g, "");
+  if (!digits) return "";
+  const normalized = digits.length <= 2 ? Number(digits) : Number(digits) / 100;
+  return toMoneyFromNumber(normalized);
+}
+
 function getCardFieldTotal(closing, key) {
   return (closing.cards[key] || []).reduce((sum, value) => sum + parseMoney(value), 0);
 }
@@ -294,9 +302,9 @@ function normalizeOcrText(text) {
 }
 
 function extractAmountFromLine(line) {
-  const matches = line.match(/\d{1,3}(?:[.,]\d{3})*[.,]\d{2}|\d+[.,]\d{2}/g);
+  const matches = line.match(/\d{1,3}(?:[.,]\d{3})*[.,]\d{2}|\d+[.,]\d{2}|\d{3,5}/g);
   if (!matches?.length) return "";
-  return toMoneyFromNumber(parseMoney(matches[matches.length - 1]));
+  return formatOcrNumeric(matches[matches.length - 1]);
 }
 
 function assignIfEmpty(target, section, key, indexOrValue, maybeValue) {
@@ -357,6 +365,48 @@ function parseReceiptOcr(text, currentClosing) {
   }
 
   return next;
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function preprocessForOcr(file) {
+  const dataUrl = await fileToDataUrl(file);
+  const image = await new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = dataUrl;
+  });
+
+  const cropTop = Math.floor(image.height * 0.18);
+  const cropBottom = Math.floor(image.height * 0.88);
+  const cropHeight = cropBottom - cropTop;
+  const scale = Math.min(2.4, Math.max(1.6, 1800 / image.width));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.floor(image.width * scale);
+  canvas.height = Math.floor(cropHeight * scale);
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  ctx.drawImage(image, 0, cropTop, image.width, cropHeight, 0, 0, canvas.width, canvas.height);
+
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = imageData.data;
+  for (let i = 0; i < data.length; i += 4) {
+    const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+    const boosted = gray < 150 ? Math.max(0, gray * 0.55) : Math.min(255, gray * 1.22);
+    data[i] = boosted;
+    data[i + 1] = boosted;
+    data[i + 2] = boosted;
+  }
+  ctx.putImageData(imageData, 0, 0);
+
+  return canvas.toDataURL("image/png");
 }
 
 function calculateTotals(closing) {
@@ -597,8 +647,16 @@ function App() {
       setMessage("Lendo notinha por OCR. Confira os valores depois.");
 
       try {
-        const { recognize } = await import("tesseract.js");
-        const result = await recognize(selected[0], "por");
+        const tesseractModule = await import("tesseract.js");
+        const recognize = tesseractModule.recognize || tesseractModule.default?.recognize;
+        if (!recognize) throw new Error("OCR indisponivel");
+
+        const preparedImage = await preprocessForOcr(selected[0]);
+        const result = await recognize(preparedImage, "eng", {
+          tessedit_pageseg_mode: "6",
+          tessedit_char_whitelist:
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,:/-() çÇãÃáÁéÉíÍóÓúÚ"
+        });
         setClosing((current) => ({
           ...parseReceiptOcr(result.data.text, current),
           updatedAt: new Date().toISOString()
@@ -843,7 +901,7 @@ function NotinhaStep({ closing, totals, onCardValue, onAttach, onOcr, onRemoveAt
       <div className="utility-row">
         <label className="attach-compact">
           <Camera size={18} />
-          Anexar foto da notinha
+          Anexar pela camera
           <input
             type="file"
             accept="image/*"
@@ -855,13 +913,39 @@ function NotinhaStep({ closing, totals, onCardValue, onAttach, onOcr, onRemoveAt
             }}
           />
         </label>
+        <label className="attach-compact">
+          <Camera size={18} />
+          Adicionar da galeria
+          <input
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={(event) => {
+              onAttach(event.target.files);
+              event.target.value = "";
+            }}
+          />
+        </label>
         <label className={`attach-compact ${isOcrRunning ? "busy" : ""}`}>
           <ReceiptText size={18} />
-          {isOcrRunning ? "Lendo OCR..." : "Ler notinha por OCR"}
+          {isOcrRunning ? "Lendo OCR..." : "OCR pela camera"}
           <input
             type="file"
             accept="image/*"
             capture="environment"
+            disabled={isOcrRunning}
+            onChange={(event) => {
+              onOcr(event.target.files);
+              event.target.value = "";
+            }}
+          />
+        </label>
+        <label className={`attach-compact ${isOcrRunning ? "busy" : ""}`}>
+          <ReceiptText size={18} />
+          {isOcrRunning ? "Lendo OCR..." : "OCR da galeria"}
+          <input
+            type="file"
+            accept="image/*"
             disabled={isOcrRunning}
             onChange={(event) => {
               onOcr(event.target.files);
