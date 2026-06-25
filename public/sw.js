@@ -1,4 +1,4 @@
-const CACHE_NAME = "fechamento-caixa-v6";
+const CACHE_NAME = "fechamento-caixa-v7";
 const APP_SHELL = [
   "/",
   "/index.html",

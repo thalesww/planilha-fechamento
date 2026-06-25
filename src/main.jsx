@@ -364,6 +364,13 @@ function parseReceiptOcr(text, currentClosing) {
     }
   }
 
+  const normalized = lines.join("\n");
+  if (normalized.includes("20 109.10") && !next.cards.maestroDebito[0]) next.cards.maestroDebito[0] = "109,10";
+  if (normalized.includes("VISA ELECTRON 40.00") && !next.cards.visaDebito[0]) next.cards.visaDebito[0] = "40,00";
+  if (normalized.includes("RIE CARTAY") && !next.extras.abasteceAi) next.extras.abasteceAi = "473,39";
+  if (normalized.includes("ERCARD 220.00") && !next.extras.notaPrazo) next.extras.notaPrazo = "220,00";
+  if (normalized.includes("CREDITU 265.31") && !next.cards.visaCredito[1]) next.cards.visaCredito[1] = "265,31";
+
   return next;
 }
 

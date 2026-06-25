@@ -3,3 +3,6 @@ dist/
 qa/
 .vite/
 *.log
+eng.traineddata
+tmp-*.mjs
+tmp-*.png
