@@ -23,13 +23,13 @@ Build de producao:
 npm run build
 ```
 
-Teste OCR com a imagem real de referencia:
+Teste OCR com a imagem real de referencia salva em `tests/fixtures/receipt-whatsapp-20260625.jpg`:
 
 ```bash
 npm run test:ocr
 ```
 
-Para usar outra imagem no teste OCR:
+Para usar outra imagem no teste OCR, sobrescreva o fixture padrao:
 
 ```bash
 OCR_TEST_IMAGE="C:/caminho/para/notinha.jpg" npm run test:ocr

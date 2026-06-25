@@ -1,9 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import tesseract from "tesseract.js";
 
-const DEFAULT_IMAGE =
-  "C:/Users/thale/AppData/Local/Packages/Microsoft.YourPhone_8wekyb3d8bbwe/TempState/medias/Screenshot_20260625_143604_WhatsApp.jpg";
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const DEFAULT_IMAGE = path.resolve(__dirname, "../tests/fixtures/receipt-whatsapp-20260625.jpg");
 
 const imagePath = process.env.OCR_TEST_IMAGE || DEFAULT_IMAGE;
 
