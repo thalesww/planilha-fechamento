@@ -43,6 +43,8 @@ function isTefLine(line) {
 export function createEmptyOcrResult() {
   return {
     vendaProdutos: "",
+    sobra: "",
+    diferencaSobra: "",
     cards: {
       eloDebito: ["", ""],
       maestroDebito: ["", ""],
@@ -86,6 +88,11 @@ export function parseReceiptOcrText(text) {
 
     if (line.includes("VENDA") && line.includes("PRODUT")) {
       if (!result.vendaProdutos) result.vendaProdutos = value;
+    } else if (line.includes("SOBRA") || (line.includes("DIFER") && line.includes("SOBRA"))) {
+      if (!result.sobra) {
+        result.sobra = value;
+        result.diferencaSobra = value;
+      }
     } else if (line.includes("ABASTECE") || line.includes("RIE CARTAY")) {
       setIfEmpty(result, "extras", "abasteceAi", value);
     } else if (line.includes("QRL") || line.includes("PIX") || line.includes("RLINX")) {
@@ -127,22 +134,24 @@ export function parseReceiptOcrText(text) {
 export function countOcrValues(result) {
   const cardCount = Object.values(result.cards).flat().filter(Boolean).length;
   const extraCount = Object.values(result.extras).filter(Boolean).length;
-  return cardCount + extraCount + (result.vendaProdutos ? 1 : 0);
+  return cardCount + extraCount + (result.vendaProdutos ? 1 : 0) + (result.sobra || result.diferencaSobra ? 1 : 0);
 }
 
 export function applyOcrResultToClosing(currentClosing, ocrResult) {
   const next = structuredClone(currentClosing);
 
-  if (ocrResult.vendaProdutos && !next.vendaProdutos) next.vendaProdutos = ocrResult.vendaProdutos;
+  next.vendaProdutos = ocrResult.vendaProdutos || "";
+  next.sobra = ocrResult.sobra || ocrResult.diferencaSobra || "";
+  next.diferencaSobra = next.sobra;
 
   for (const [key, values] of Object.entries(ocrResult.cards)) {
     values.forEach((value, index) => {
-      if (value && !next.cards[key][index]) next.cards[key][index] = value;
+      if (next.cards[key]) next.cards[key][index] = value || "";
     });
   }
 
   for (const [key, value] of Object.entries(ocrResult.extras)) {
-    if (value && !next.extras[key]) next.extras[key] = value;
+    next.extras[key] = value || "";
   }
 
   return next;

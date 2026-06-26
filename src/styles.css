@@ -1068,6 +1068,22 @@ h3 {
   color: var(--on-surface);
 }
 
+.ocr-source-input {
+  width: 110px;
+  max-width: 45%;
+  border: 1px solid var(--outline-variant);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 6px 8px;
+  text-align: right;
+}
+
+.ocr-source-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 18%, transparent);
+  outline: none;
+}
+
 .ocr-review-sum-row {
   display: flex;
   justify-content: space-between;

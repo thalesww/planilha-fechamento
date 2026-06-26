@@ -173,6 +173,8 @@ function createBlankClosing() {
     extras: Object.fromEntries(EXTRA_FIELDS.map((field) => [field.key, ""])),
     optionalExtras: Object.fromEntries(OPTIONAL_EXTRA_FIELDS.map((field) => [field.key, ""])),
     vendaProdutos: "",
+    sobra: "",
+    diferencaSobra: "",
     observations: "",
     attachments: [],
     status: "rascunho",
@@ -411,6 +413,7 @@ function calculateTotals(closing) {
   const optionalExtrasTotal = OPTIONAL_EXTRA_FIELDS.reduce((sum, field) => sum + getOptionalExtraTotal(closing, field.key), 0);
   const venda = parseMoney(closing.vendaProdutos);
   const entradas = cardTotal + extrasTotal + optionalExtrasTotal;
+  const sobra = parseMoney(closing.sobra || closing.diferencaSobra);
 
   return {
     cardTotal,
@@ -418,7 +421,7 @@ function calculateTotals(closing) {
     optionalExtrasTotal,
     entradas,
     venda,
-    diferenca: entradas - venda
+    diferenca: closing.sobra || closing.diferencaSobra ? sobra : entradas - venda
   };
 }
 
@@ -472,7 +475,7 @@ function App() {
   const [ocrProgress, setOcrProgress] = useState("");
   const [ocrResult, setOcrResult] = useState(null); // raw parsed result before confirmation
   const [ocrFoundCount, setOcrFoundCount] = useState(0);
-  const TOTAL_OCR_FIELDS = 13; // 6 card pairs * 2 + 4 extras
+  const TOTAL_OCR_FIELDS = 18; // venda + 6 card pairs * 2 + 4 extras + sobra
   // Comprovantes state
   const [comprovantes, setComprovantes] = useState(BLANK_COMPROVANTES);
 
@@ -737,6 +740,36 @@ function App() {
     }));
   }, []);
 
+
+  const updateOcrCardValue = useCallback((fieldKey, index, value) => {
+    setOcrResult((current) => {
+      if (!current) return current;
+      const currentValues = current.cards?.[fieldKey] || ["", ""];
+      const nextValues = [...currentValues];
+      nextValues[index] = toMoneyInput(value);
+      return {
+        ...current,
+        cards: { ...current.cards, [fieldKey]: nextValues }
+      };
+    });
+  }, []);
+
+  const updateOcrExtraValue = useCallback((fieldKey, value) => {
+    setOcrResult((current) => current ? {
+      ...current,
+      extras: { ...current.extras, [fieldKey]: toMoneyInput(value) }
+    } : current);
+  }, []);
+
+  const updateOcrVendaProdutos = useCallback((value) => {
+    setOcrResult((current) => current ? { ...current, vendaProdutos: toMoneyInput(value) } : current);
+  }, []);
+
+  const updateOcrSobra = useCallback((value) => {
+    const formatted = toMoneyInput(value);
+    setOcrResult((current) => current ? { ...current, sobra: formatted, diferencaSobra: formatted } : current);
+  }, []);
+
   const confirmOcr = useCallback(() => {
     if (!ocrResult) return;
     setClosing((current) => ({
@@ -925,6 +958,10 @@ function App() {
           TOTAL_OCR_FIELDS={TOTAL_OCR_FIELDS}
           onConfirmOcr={confirmOcr}
           onDiscardOcr={discardOcr}
+          onChangeOcrCardValue={updateOcrCardValue}
+          onChangeOcrExtraValue={updateOcrExtraValue}
+          onChangeOcrVendaProdutos={updateOcrVendaProdutos}
+          onChangeOcrSobra={updateOcrSobra}
         />
       ) : null}
 
@@ -989,7 +1026,11 @@ function NotinhaStep({
   ocrFoundCount,
   TOTAL_OCR_FIELDS,
   onConfirmOcr,
-  onDiscardOcr
+  onDiscardOcr,
+  onChangeOcrCardValue,
+  onChangeOcrExtraValue,
+  onChangeOcrVendaProdutos,
+  onChangeOcrSobra
 }) {
   const activeField = CARD_FIELDS[closing.cardIndex];
 
@@ -1055,6 +1096,10 @@ function NotinhaStep({
               totalFields={TOTAL_OCR_FIELDS}
               onConfirm={onConfirmOcr}
               onDiscard={onDiscardOcr}
+              onChangeCardValue={onChangeOcrCardValue}
+              onChangeExtraValue={onChangeOcrExtraValue}
+              onChangeVendaProdutos={onChangeOcrVendaProdutos}
+              onChangeSobra={onChangeOcrSobra}
             />
           </div>
         )}
