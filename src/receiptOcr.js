@@ -56,7 +56,9 @@ export function createEmptyOcrResult() {
       pixStone: "",
       notaPrazo: "",
       sangria: ""
-    }
+    },
+    sobra: "",
+    ocrInconsistent: false
   };
 }
 
@@ -72,6 +74,43 @@ function setIfEmpty(result, section, key, indexOrValue, maybeValue) {
   if (value && !result[section][key]) result[section][key] = value;
 }
 
+function isSobraLine(line) {
+  return line.includes("DIFERENCA(SOBRA)")
+    || line.includes("DIFERENCA (SOBRA)")
+    || line.includes("DIFERENCA")
+    || line.includes("SOBRA");
+}
+
+const OCR_RECEIPT_TOTAL_TOLERANCE = 0.01;
+
+function sumMoneyValues(values) {
+  return values.reduce((total, value) => total + parseMoney(value), 0);
+}
+
+export function calculateOcrReceiptTotals(ocrResult) {
+  const cardTotal = Object.values(ocrResult?.cards || {})
+    .flat()
+    .reduce((total, value) => total + parseMoney(value), 0);
+  const extraTotal = sumMoneyValues(Object.values(ocrResult?.extras || {}));
+  const optionalExtraTotal = sumMoneyValues(Object.values(ocrResult?.optionalExtras || {}));
+  const vendaProdutos = parseMoney(ocrResult?.vendaProdutos);
+  const calculatedSobra = cardTotal + extraTotal + optionalExtraTotal - vendaProdutos;
+  const recognizedSobra = parseMoney(ocrResult?.sobra);
+  const difference = calculatedSobra - recognizedSobra;
+  const hasRecognizedSobra = Boolean(ocrResult?.sobra);
+
+  return {
+    cardTotal,
+    extraTotal,
+    optionalExtraTotal,
+    vendaProdutos,
+    calculatedSobra,
+    recognizedSobra,
+    difference,
+    isInconsistent: hasRecognizedSobra && Math.abs(difference) > OCR_RECEIPT_TOTAL_TOLERANCE
+  };
+}
+
 export function parseReceiptOcrText(text) {
   const result = createEmptyOcrResult();
   const normalized = normalizeOcrText(text);
@@ -84,7 +123,9 @@ export function parseReceiptOcrText(text) {
     const value = extractAmountFromLine(line);
     if (!value) continue;
 
-    if (line.includes("VENDA") && line.includes("PRODUT")) {
+    if (isSobraLine(line)) {
+      if (!result.sobra) result.sobra = value;
+    } else if (line.includes("VENDA") && line.includes("PRODUT")) {
       if (!result.vendaProdutos) result.vendaProdutos = value;
     } else if (line.includes("ABASTECE") || line.includes("RIE CARTAY")) {
       setIfEmpty(result, "extras", "abasteceAi", value);
@@ -121,13 +162,17 @@ export function parseReceiptOcrText(text) {
     }
   }
 
+  const totals = calculateOcrReceiptTotals(result);
+  result.ocrInconsistent = totals.isInconsistent;
+  result.ocrTotals = totals;
+
   return result;
 }
 
 export function countOcrValues(result) {
   const cardCount = Object.values(result.cards).flat().filter(Boolean).length;
   const extraCount = Object.values(result.extras).filter(Boolean).length;
-  return cardCount + extraCount + (result.vendaProdutos ? 1 : 0);
+  return cardCount + extraCount + (result.vendaProdutos ? 1 : 0) + (result.sobra ? 1 : 0);
 }
 
 export function applyOcrResultToClosing(currentClosing, ocrResult) {

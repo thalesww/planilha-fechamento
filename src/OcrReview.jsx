@@ -84,6 +84,7 @@ export function OcrReviewPanel({ ocrResult, foundCount, totalFields, onConfirm, 
       return { ...field, val };
     })
     .filter(r => r.val > 0);
+  const sobraValue = parseMoney(ocrResult?.sobra);
 
   return (
     <div className="ocr-review-panel">
@@ -138,6 +139,25 @@ export function OcrReviewPanel({ ocrResult, foundCount, totalFields, onConfirm, 
               </div>
             </div>
           ))}
+
+          {ocrResult?.sobra && (
+            <div className="ocr-review-item">
+              <div className="ocr-review-item-label">Sobra / Diferença</div>
+              <div className="ocr-review-sources">
+                <div className="ocr-review-source-row">
+                  <span className="ocr-source-name">Reconhecido</span>
+                  <span className="ocr-source-value">{formatCurrency(sobraValue)}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {ocrResult?.ocrInconsistent && (
+            <div className="ocr-review-empty">
+              <AlertTriangle size={24} />
+              <p>Valores do OCR inconsistentes: a sobra reconhecida não bate com cartões + extras - venda produtos.</p>
+            </div>
+          )}
         </div>
       )}
 

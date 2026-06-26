@@ -472,7 +472,7 @@ function App() {
   const [ocrProgress, setOcrProgress] = useState("");
   const [ocrResult, setOcrResult] = useState(null); // raw parsed result before confirmation
   const [ocrFoundCount, setOcrFoundCount] = useState(0);
-  const TOTAL_OCR_FIELDS = 13; // 6 card pairs * 2 + 4 extras
+  const TOTAL_OCR_FIELDS = 18; // 6 card pairs * 2 + 4 extras + venda produtos + sobra
   // Comprovantes state
   const [comprovantes, setComprovantes] = useState(BLANK_COMPROVANTES);
 
