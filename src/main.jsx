@@ -307,7 +307,50 @@ function fileToDataUrl(file) {
   });
 }
 
-async function preprocessForOcr(file) {
+function getReceiptCropBounds(imageData, width, height) {
+  const data = imageData.data;
+  let minX = width;
+  let minY = height;
+  let maxX = 0;
+  let maxY = 0;
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const index = (y * width + x) * 4;
+      const r = data[index];
+      const g = data[index + 1];
+      const b = data[index + 2];
+      const brightness = (r + g + b) / 3;
+      const colorSpread = Math.max(r, g, b) - Math.min(r, g, b);
+      const looksLikePaperOrInk = brightness > 105 && colorSpread < 85;
+
+      if (looksLikePaperOrInk) {
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+      }
+    }
+  }
+
+  if (maxX <= minX || maxY <= minY) return { x: 0, y: 0, width, height };
+
+  const marginX = Math.floor(width * 0.03);
+  const marginY = Math.floor(height * 0.03);
+  const x = Math.max(0, minX - marginX);
+  const y = Math.max(0, minY - marginY);
+  const right = Math.min(width, maxX + marginX);
+  const bottom = Math.min(height, maxY + marginY);
+
+  return {
+    x,
+    y,
+    width: right - x,
+    height: bottom - y
+  };
+}
+
+async function preprocessForOcr(file, { crop = true, contrast = true } = {}) {
   const dataUrl = await fileToDataUrl(file);
   const image = await new Promise((resolve, reject) => {
     const img = new Image();
@@ -316,26 +359,45 @@ async function preprocessForOcr(file) {
     img.src = dataUrl;
   });
 
-  const cropTop = Math.floor(image.height * 0.18);
-  const cropBottom = Math.floor(image.height * 0.88);
-  const cropHeight = cropBottom - cropTop;
-  const scale = Math.min(2.4, Math.max(1.6, 1800 / image.width));
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.floor(image.width * scale);
-  canvas.height = Math.floor(cropHeight * scale);
-  const ctx = canvas.getContext("2d", { willReadFrequently: true });
-  ctx.drawImage(image, 0, cropTop, image.width, cropHeight, 0, 0, canvas.width, canvas.height);
-
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const data = imageData.data;
-  for (let i = 0; i < data.length; i += 4) {
-    const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-    const boosted = gray < 150 ? Math.max(0, gray * 0.55) : Math.min(255, gray * 1.22);
-    data[i] = boosted;
-    data[i + 1] = boosted;
-    data[i + 2] = boosted;
+  let cropBounds = { x: 0, y: 0, width: image.width, height: image.height };
+  if (crop) {
+    const probeCanvas = document.createElement("canvas");
+    probeCanvas.width = image.width;
+    probeCanvas.height = image.height;
+    const probeCtx = probeCanvas.getContext("2d", { willReadFrequently: true });
+    probeCtx.drawImage(image, 0, 0);
+    cropBounds = getReceiptCropBounds(probeCtx.getImageData(0, 0, image.width, image.height), image.width, image.height);
   }
-  ctx.putImageData(imageData, 0, 0);
+
+  const scale = Math.min(2.6, Math.max(1.6, 1900 / cropBounds.width));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.floor(cropBounds.width * scale);
+  canvas.height = Math.floor(cropBounds.height * scale);
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  ctx.drawImage(
+    image,
+    cropBounds.x,
+    cropBounds.y,
+    cropBounds.width,
+    cropBounds.height,
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  );
+
+  if (contrast) {
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    for (let i = 0; i < data.length; i += 4) {
+      const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+      const boosted = gray < 155 ? Math.max(0, gray * 0.5) : Math.min(255, gray * 1.25);
+      data[i] = boosted;
+      data[i + 1] = boosted;
+      data[i + 2] = boosted;
+    }
+    ctx.putImageData(imageData, 0, 0);
+  }
 
   return canvas.toDataURL("image/png");
 }
@@ -610,21 +672,31 @@ function App() {
       if (!recognize) throw new Error("OCR indisponivel");
 
       const ocrOptions = { tessedit_pageseg_mode: "6" };
-      setOcrProgress("Lendo imagem (passagem 1)…");
-      const rawResult = await recognize(selected[0], "eng", ocrOptions);
-      let parsed = parseReceiptOcrText(rawResult.data.text);
-      let foundValues = countOcrValues(parsed);
+      const attempts = [
+        { label: "imagem original", input: selected[0] },
+        {
+          label: "notinha recortada",
+          input: () => preprocessForOcr(selected[0], { crop: true, contrast: false })
+        },
+        {
+          label: "notinha recortada com contraste",
+          input: () => preprocessForOcr(selected[0], { crop: true, contrast: true })
+        }
+      ];
 
-      if (foundValues < 6) {
-        setOcrProgress("Melhorando imagem para nova leitura…");
-        const preparedImage = await preprocessForOcr(selected[0]);
-        setOcrProgress("Lendo imagem (passagem 2)…");
-        const preparedResult = await recognize(preparedImage, "eng", ocrOptions);
-        const preparedParsed = parseReceiptOcrText(preparedResult.data.text);
-        const preparedFoundValues = countOcrValues(preparedParsed);
-        if (preparedFoundValues > foundValues) {
-          parsed = preparedParsed;
-          foundValues = preparedFoundValues;
+      let parsed = null;
+      let foundValues = 0;
+      for (let index = 0; index < attempts.length; index += 1) {
+        const attempt = attempts[index];
+        setOcrProgress(`Lendo ${attempt.label} (${index + 1}/${attempts.length})…`);
+        const input = typeof attempt.input === "function" ? await attempt.input() : attempt.input;
+        const ocrRead = await recognize(input, "eng", ocrOptions);
+        const attemptParsed = parseReceiptOcrText(ocrRead.data.text);
+        const attemptFoundValues = countOcrValues(attemptParsed);
+
+        if (attemptFoundValues > foundValues) {
+          parsed = attemptParsed;
+          foundValues = attemptFoundValues;
         }
       }
 
