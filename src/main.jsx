@@ -467,6 +467,7 @@ function App() {
   const [history, setHistory] = useState([]);
   const [message, setMessage] = useState("");
   const [currentView, setCurrentView] = useState("home");
+  const [previewAttachment, setPreviewAttachment] = useState(null);
   // OCR state
   const [ocrStatus, setOcrStatus] = useState("idle"); // idle | running | done | error
   const [ocrProgress, setOcrProgress] = useState("");
@@ -479,6 +480,7 @@ function App() {
   const totals = useMemo(() => calculateTotals(closing), [closing]);
   const summary = useMemo(() => buildSummary(closing, totals), [closing, totals]);
   const currentStep = STEPS[closing.step];
+  const latestAttachment = closing.attachments.at(-1) || null;
 
   const lancamentos = useMemo(() => {
     if (currentStep.id !== "resumo") return [];
@@ -511,6 +513,17 @@ function App() {
   useEffect(() => {
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!previewAttachment) return undefined;
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") setPreviewAttachment(null);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [previewAttachment]);
 
   useEffect(() => {
     try {
@@ -763,6 +776,7 @@ function App() {
       ...current,
       attachments: current.attachments.filter((attachment) => attachment.id !== id)
     }));
+    setPreviewAttachment((current) => (current?.id === id ? null : current));
   }, []);
 
   const loadFromHistory = useCallback((item) => {
@@ -831,6 +845,9 @@ function App() {
   return (
     <>
       {ocrStatus === "running" && <OcrLoadingOverlay progress={ocrProgress} />}
+      {previewAttachment ? (
+        <AttachmentPreviewModal attachment={previewAttachment} onClose={() => setPreviewAttachment(null)} />
+      ) : null}
       {currentView === "home" ? (
         <Home 
           closing={closing} 
@@ -925,6 +942,8 @@ function App() {
           TOTAL_OCR_FIELDS={TOTAL_OCR_FIELDS}
           onConfirmOcr={confirmOcr}
           onDiscardOcr={discardOcr}
+          onPreviewAttachment={setPreviewAttachment}
+          latestAttachment={latestAttachment}
         />
       ) : null}
 
@@ -977,6 +996,29 @@ function App() {
   );
 }
 
+
+function AttachmentPreviewModal({ attachment, onClose }) {
+  return (
+    <div className="attachment-modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section
+        className="attachment-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="attachment-preview-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="attachment-modal-header">
+          <h2 id="attachment-preview-title">{attachment.name}</h2>
+          <button type="button" onClick={onClose}>
+            Fechar
+          </button>
+        </div>
+        <img src={attachment.dataUrl} alt={attachment.name} />
+      </section>
+    </div>
+  );
+}
+
 function NotinhaStep({
   closing,
   totals,
@@ -989,7 +1031,9 @@ function NotinhaStep({
   ocrFoundCount,
   TOTAL_OCR_FIELDS,
   onConfirmOcr,
-  onDiscardOcr
+  onDiscardOcr,
+  onPreviewAttachment,
+  latestAttachment
 }) {
   const activeField = CARD_FIELDS[closing.cardIndex];
 
@@ -1037,7 +1081,14 @@ function NotinhaStep({
           <div className="thumbs">
             {closing.attachments.map((attachment) => (
               <figure key={attachment.id}>
-                <img src={attachment.dataUrl} alt={attachment.name} />
+                <button
+                  type="button"
+                  className="thumb-preview-button"
+                  onClick={() => onPreviewAttachment(attachment)}
+                  aria-label={`Abrir nota ${attachment.name}`}
+                >
+                  <img src={attachment.dataUrl} alt={attachment.name} />
+                </button>
                 <figcaption>{attachment.name}</figcaption>
                 <button type="button" onClick={() => onRemoveAttachment(attachment.id)} aria-label="Remover anexo">
                   <Trash2 size={15} />
@@ -1048,7 +1099,12 @@ function NotinhaStep({
         ) : null}
 
         {ocrStatus === "done" && ocrResult && (
-          <div style={{ marginTop: "16px" }}>
+          <div className="ocr-review-wrapper">
+            {latestAttachment ? (
+              <button type="button" className="open-note-button" onClick={() => onPreviewAttachment(latestAttachment)}>
+                Abrir imagem da nota
+              </button>
+            ) : null}
             <OcrReviewPanel
               ocrResult={ocrResult}
               foundCount={ocrFoundCount}
