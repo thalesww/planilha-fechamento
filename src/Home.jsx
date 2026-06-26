@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function Home({ closing, updateClosing, history, onNew, onLoadHistory, calculateTotals, formatCurrency, formatDate }) {
+export default function Home({ closing, updateClosing, history, onNew, onLoadHistory, onOpenQrScanner, calculateTotals, formatCurrency, formatDate }) {
   return (
     <div className="bg-background text-on-background min-h-screen flex flex-col">
       <header className="bg-surface dark:bg-surface-dim docked full-width top-0 border-b border-outline-variant dark:border-outline flat no shadows flex flex-col w-full px-container-padding py-2 sticky z-40">
@@ -68,6 +68,13 @@ export default function Home({ closing, updateClosing, history, onNew, onLoadHis
               </select>
             </div>
           </div>
+          <button
+            type="button"
+            onClick={onOpenQrScanner}
+            className="mt-2 w-full bg-surface-container-high hover:bg-surface-variant text-primary font-bold rounded-lg py-4 flex items-center justify-center gap-2 transition-colors duration-200 min-h-[touch-target-min] border border-outline-variant">
+            <span className="material-symbols-outlined">qr_code_scanner</span>
+            Ler QR Code do fechamento
+          </button>
           <button 
             onClick={onNew}
             className="mt-4 w-full bg-primary hover:bg-primary-fixed-dim text-on-primary font-bold rounded-lg py-4 flex items-center justify-center gap-2 transition-colors duration-200 min-h-[touch-target-min]">
