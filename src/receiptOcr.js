@@ -56,7 +56,9 @@ export function createEmptyOcrResult() {
       pixStone: "",
       notaPrazo: "",
       sangria: ""
-    }
+    },
+    optionalExtras: {},
+    sobra: ""
   };
 }
 
@@ -70,6 +72,107 @@ function setIfEmpty(result, section, key, indexOrValue, maybeValue) {
 
   const value = indexOrValue;
   if (value && !result[section][key]) result[section][key] = value;
+}
+
+const CARD_LABEL_ALIASES = [
+  { key: "eloDebito", index: 0, patterns: [/\bELO\b.*\bDEBITO\b/, /\bDEBITO\b.*\bELO\b/] },
+  { key: "maestroDebito", index: 0, patterns: [/\bMAESTRO\b/, /\bMASTER\s*DEBITO\b/] },
+  { key: "visaDebito", index: 0, patterns: [/\bVISA\b.*\bDEBITO\b/, /\bVISA\s*ELECTRON\b/] },
+  { key: "eloCredito", index: 0, patterns: [/\bELO\b.*\bCREDITO\b/, /\bCREDITO\b.*\bELO\b/] },
+  { key: "mastercardCredito", index: 0, patterns: [/\bMASTERCARD\b/, /\bMASTER\s*CARD\b/, /\bMASTER\b.*\bCREDITO\b/] },
+  { key: "visaCredito", index: 0, patterns: [/\bVISA\b.*\bCREDITO\b/, /\bCREDITO\b.*\bVISA\b/] }
+];
+
+const EXTRA_LABEL_ALIASES = [
+  { section: "extras", key: "abasteceAi", patterns: [/\bABASTECE\b/, /\bABASTECE\s*AI\b/] },
+  { section: "extras", key: "notaPrazo", patterns: [/\bNOTA\b.*\bPRAZO\b/, /\bPRAZO\b/] },
+  { section: "extras", key: "sangria", patterns: [/\bSANGRIA\b/] },
+  { section: "optionalExtras", key: "pixCnpj", patterns: [/\bPIX\b.*\bCNPJ\b/] },
+  { section: "extras", key: "pixStone", patterns: [/\bPIX\s*STONE\b/, /\bQRLIX\b/, /\bQRLINX\b/, /\bPIX\b/] },
+  { section: "optionalExtras", key: "outroDebito", patterns: [/\bOUTRO\b.*\bDEBITO\b/] },
+  { section: "optionalExtras", key: "outroCredito", patterns: [/\bOUTRO\b.*\bCREDITO\b/] },
+  { section: "optionalExtras", key: "depositosConta", patterns: [/\bDEPOSITO/, /\bCONTA\b/] },
+  { section: "optionalExtras", key: "proFrotas", patterns: [/\bPRO\s*FROTAS\b/] },
+  { section: "optionalExtras", key: "ctf", patterns: [/\bCTF\b/] },
+  { section: "optionalExtras", key: "chequesVista", patterns: [/\bCHEQUE/, /\bCHEQUES\b.*\bVISTA\b/] },
+  { section: "optionalExtras", key: "valesMotorista", patterns: [/\bVALES?\b.*\bMOTORISTA\b/] },
+  { section: "optionalExtras", key: "valesFuncionarios", patterns: [/\bVALES?\b.*\bFUNCIONARIO\b/] },
+  { section: "optionalExtras", key: "especie", patterns: [/\bESPECIE\b/, /\bDINHEIRO\b/] },
+  { section: "optionalExtras", key: "moedas", patterns: [/\bMOEDAS?\b/] },
+  { section: "optionalExtras", key: "cedulasNaoAceitas", patterns: [/\bCEDULAS?\b.*\bNAO\b.*\bACEITAS?\b/, /\bCOFRE\b/] }
+];
+
+function normalizeLabel(label) {
+  return normalizeOcrText(label).replace(/[^A-Z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function extractComputerAmount(line) {
+  const match = line.match(/(?:R\$\s*)?[-+]?\d{1,3}(?:\.\d{3})*,\d{2}|(?:R\$\s*)?[-+]?\d+[,.]\d{2}/i);
+  return match ? formatNumber(parseMoney(match[0])) : "";
+}
+
+function createEmptyClosingParseResult() {
+  return {
+    vendaProdutos: "",
+    cards: {
+      eloDebito: ["", ""],
+      maestroDebito: ["", ""],
+      visaDebito: ["", ""],
+      eloCredito: ["", ""],
+      mastercardCredito: ["", ""],
+      visaCredito: ["", ""]
+    },
+    extras: {
+      abasteceAi: "",
+      pixStone: "",
+      notaPrazo: "",
+      sangria: ""
+    },
+    optionalExtras: {},
+    sobra: ""
+  };
+}
+
+export function parseClosingText(text) {
+  const result = createEmptyClosingParseResult();
+  const lines = String(text || "")
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+
+  for (const line of lines) {
+    const value = extractComputerAmount(line);
+    if (!value) continue;
+
+    const [rawLabel = line] = line.split(/[:;=]/);
+    const label = normalizeLabel(rawLabel);
+    const tefIndex = /\bTEF\b/.test(label) ? 1 : 0;
+
+    if (/\bVENDA\b.*\bPRODUT/.test(label) || /\bVENDA\b.*\bPOSTO\b/.test(label)) {
+      result.vendaProdutos = value;
+      continue;
+    }
+
+    if (/\bSOBRA\b/.test(label) || /\bTROCO\b.*\bFINAL\b/.test(label) || /\bDIFERENCA\b/.test(label)) {
+      result.sobra = value;
+      continue;
+    }
+
+    const cardAlias = CARD_LABEL_ALIASES.find((alias) => alias.patterns.some((pattern) => pattern.test(label)));
+    if (cardAlias) {
+      result.cards[cardAlias.key][tefIndex || cardAlias.index] = value;
+      continue;
+    }
+
+    const extraAlias = EXTRA_LABEL_ALIASES.find((alias) => alias.patterns.some((pattern) => pattern.test(label)));
+    if (extraAlias?.section === "extras") {
+      result.extras[extraAlias.key] = value;
+    } else if (extraAlias?.section === "optionalExtras") {
+      result.optionalExtras[extraAlias.key] = value;
+    }
+  }
+
+  return result;
 }
 
 export function parseReceiptOcrText(text) {
@@ -126,24 +229,32 @@ export function parseReceiptOcrText(text) {
 
 export function countOcrValues(result) {
   const cardCount = Object.values(result.cards).flat().filter(Boolean).length;
-  const extraCount = Object.values(result.extras).filter(Boolean).length;
-  return cardCount + extraCount + (result.vendaProdutos ? 1 : 0);
+  const extraCount = Object.values(result.extras || {}).filter(Boolean).length;
+  const optionalExtraCount = Object.values(result.optionalExtras || {}).filter(Boolean).length;
+  return cardCount + extraCount + optionalExtraCount + (result.vendaProdutos ? 1 : 0) + (result.sobra ? 1 : 0);
 }
 
-export function applyOcrResultToClosing(currentClosing, ocrResult) {
+export function applyOcrResultToClosing(currentClosing, ocrResult, { overwrite = false } = {}) {
   const next = structuredClone(currentClosing);
 
-  if (ocrResult.vendaProdutos && !next.vendaProdutos) next.vendaProdutos = ocrResult.vendaProdutos;
+  if (ocrResult.vendaProdutos && (overwrite || !next.vendaProdutos)) next.vendaProdutos = ocrResult.vendaProdutos;
 
   for (const [key, values] of Object.entries(ocrResult.cards)) {
     values.forEach((value, index) => {
-      if (value && !next.cards[key][index]) next.cards[key][index] = value;
+      if (value && (overwrite || !next.cards[key][index])) next.cards[key][index] = value;
     });
   }
 
-  for (const [key, value] of Object.entries(ocrResult.extras)) {
-    if (value && !next.extras[key]) next.extras[key] = value;
+  for (const [key, value] of Object.entries(ocrResult.extras || {})) {
+    if (value && (overwrite || !next.extras[key])) next.extras[key] = value;
   }
+
+  next.optionalExtras = next.optionalExtras || {};
+  for (const [key, value] of Object.entries(ocrResult.optionalExtras || {})) {
+    if (value && (overwrite || !next.optionalExtras[key])) next.optionalExtras[key] = value;
+  }
+
+  if (ocrResult.sobra && (overwrite || !next.sobra)) next.sobra = ocrResult.sobra;
 
   return next;
 }

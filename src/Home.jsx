@@ -1,6 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 
-export default function Home({ closing, updateClosing, history, onNew, onLoadHistory, calculateTotals, formatCurrency, formatDate }) {
+export default function Home({ closing, updateClosing, history, onNew, onLoadHistory, calculateTotals, formatCurrency, formatDate, onImportClosingText }) {
+  const [closingText, setClosingText] = useState("");
+
+  const handleImport = () => {
+    if (onImportClosingText(closingText)) setClosingText("");
+  };
+
   return (
     <div className="bg-background text-on-background min-h-screen flex flex-col">
       <header className="bg-surface dark:bg-surface-dim docked full-width top-0 border-b border-outline-variant dark:border-outline flat no shadows flex flex-col w-full px-container-padding py-2 sticky z-40">
@@ -73,6 +79,32 @@ export default function Home({ closing, updateClosing, history, onNew, onLoadHis
             className="mt-4 w-full bg-primary hover:bg-primary-fixed-dim text-on-primary font-bold rounded-lg py-4 flex items-center justify-center gap-2 transition-colors duration-200 min-h-[touch-target-min]">
             <span className="material-symbols-outlined">add</span>
             Iniciar Novo Fechamento
+          </button>
+        </div>
+
+        {/* Paste Closing Values */}
+        <div className="bg-surface-container-lowest rounded-xl p-4 md:p-6 border border-outline-variant shadow-sm flex flex-col gap-stack-gap">
+          <div>
+            <h2 className="text-headline-md font-headline-md text-on-surface">Colar valores do fechamento</h2>
+            <p className="text-body-sm font-body-sm text-on-surface-variant mt-1">Cole o texto gerado pelo computador para preencher cartões, extras, venda de produtos e sobra automaticamente.</p>
+          </div>
+          <label className="block">
+            <span className="block text-label-sm font-label-sm text-on-surface-variant mb-1">Texto do fechamento</span>
+            <textarea
+              className="w-full bg-surface border border-outline-variant rounded px-3 py-3 text-body-md font-body-md text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary min-h-[140px]"
+              value={closingText}
+              placeholder={`ELO Debito: R$ 123,45\nVenda de produtos: R$ 11.115,26\nTroco final / diferenca: R$ 0,13`}
+              onChange={(event) => setClosingText(event.target.value)}
+            />
+          </label>
+          <button
+            type="button"
+            onClick={handleImport}
+            disabled={!closingText.trim()}
+            className="w-full bg-secondary hover:bg-secondary/90 disabled:opacity-50 disabled:cursor-not-allowed text-on-secondary font-bold rounded-lg py-4 flex items-center justify-center gap-2 transition-colors duration-200 min-h-[touch-target-min]"
+          >
+            <span className="material-symbols-outlined">content_paste_go</span>
+            Importar
           </button>
         </div>
 
