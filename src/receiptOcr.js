@@ -36,6 +36,10 @@ function extractAmountFromLine(line) {
   return formatOcrNumeric(matches[matches.length - 1]);
 }
 
+function isTefLine(line) {
+  return /\bT[EFP]\b/.test(line) || line.includes("F -") || line.includes("EF -");
+}
+
 export function createEmptyOcrResult() {
   return {
     vendaProdutos: "",
@@ -80,48 +84,42 @@ export function parseReceiptOcrText(text) {
     const value = extractAmountFromLine(line);
     if (!value) continue;
 
-    if (line.includes("8112.39") || (line.includes("VENDA") && line.includes("PRODUT"))) {
-      if (!result.vendaProdutos) result.vendaProdutos = value === "8.112,39" ? value : "8.112,39";
+    if (line.includes("VENDA") && line.includes("PRODUT")) {
+      if (!result.vendaProdutos) result.vendaProdutos = value;
     } else if (line.includes("ABASTECE") || line.includes("RIE CARTAY")) {
-      setIfEmpty(result, "extras", "abasteceAi", line.includes("RIE CARTAY") ? "473,39" : value);
+      setIfEmpty(result, "extras", "abasteceAi", value);
     } else if (line.includes("QRL") || line.includes("PIX") || line.includes("RLINX")) {
       setIfEmpty(result, "extras", "pixStone", value);
     } else if (line.includes("NOTA") && line.includes("PRAZ")) {
       setIfEmpty(result, "extras", "notaPrazo", value);
     } else if (line.includes("ANGR") || line.includes("SANGRIA")) {
-      setIfEmpty(result, "extras", "sangria", line.includes("ANGR") ? "864,00" : value);
+      setIfEmpty(result, "extras", "sangria", value);
     } else if (line.includes("ELO") && line.includes("CREDIT")) {
-      setIfEmpty(result, "cards", "eloCredito", 0, line.includes("107") ? "311,76" : value);
+      setIfEmpty(result, "cards", "eloCredito", isTefLine(line) ? 1 : 0, value);
     } else if (line.includes("ELO") && line.includes("DEBIT")) {
-      setIfEmpty(result, "cards", "eloDebito", 1, value);
+      setIfEmpty(result, "cards", "eloDebito", isTefLine(line) ? 1 : 0, value);
     } else if (line.includes("HAESTRO") || line.includes("MAESTRO")) {
-      if (line.includes("TEF") || line.includes("EF") || line.includes("F -")) {
-        setIfEmpty(result, "cards", "maestroDebito", 1, line.includes("1859") ? "1.859,19" : value);
+      if (isTefLine(line)) {
+        setIfEmpty(result, "cards", "maestroDebito", 1, value);
       } else {
         setIfEmpty(result, "cards", "maestroDebito", 0, value);
       }
     } else if (line.includes("HASTERC") || line.includes("MASTERC") || line.includes("ERCARD")) {
-      if (line.includes("TEF") || line.includes("EF") || line.includes("HASTERC ARD")) {
-        setIfEmpty(result, "cards", "mastercardCredito", 1, line.includes("1122") ? "1.122,11" : value);
+      if (isTefLine(line) || line.includes("HASTERC ARD")) {
+        setIfEmpty(result, "cards", "mastercardCredito", 1, value);
       } else {
-        setIfEmpty(result, "cards", "mastercardCredito", 0, "220,00");
+        setIfEmpty(result, "cards", "mastercardCredito", 0, value);
       }
     } else if (line.includes("TEF") && line.includes("VISA") && line.includes("ELECTRON")) {
-      setIfEmpty(result, "cards", "visaDebito", 1, line.includes("174") ? "1.174,70" : value);
+      setIfEmpty(result, "cards", "visaDebito", 1, value);
     } else if (line.includes("TEF") && line.includes("VISA")) {
-      setIfEmpty(result, "cards", "visaCredito", 0, line.includes("81.84") || line.includes("£81.84") ? "687,84" : value);
+      setIfEmpty(result, "cards", "visaCredito", 0, value);
     } else if (line.includes("VISA") && line.includes("CREDIT")) {
       setIfEmpty(result, "cards", "visaCredito", 1, value);
     } else if (line.includes("VISA") && line.includes("ELECTRON")) {
       setIfEmpty(result, "cards", "visaDebito", 0, value);
     }
   }
-
-  if (normalized.includes("20 109.10")) result.cards.maestroDebito[0] = "109,10";
-  if (normalized.includes("VISA ELECTRON 40.00")) result.cards.visaDebito[0] = "40,00";
-  if (normalized.includes("RIE CARTAY")) result.extras.abasteceAi = "473,39";
-  if (normalized.includes("ERCARD 220.00")) result.extras.notaPrazo = "220,00";
-  if (normalized.includes("CREDITU 265.31")) result.cards.visaCredito[1] = "265,31";
 
   return result;
 }

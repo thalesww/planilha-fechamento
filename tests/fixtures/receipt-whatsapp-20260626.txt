@@ -1,0 +1,36 @@
+POSTO UTLA FLORESTA LTDA
+CNPJ 45.382.951/0001-00 IE: 0042758310023
+RUA RAUL MENDES, 151 - BELO HORIZONTE/MG
+Emitido em: 26/06/2026 13:58h
+
+INFORMACOES DO CAIXA
+Conta.....: UTLA FLORESTA - PDV 01
+Data......: 26/06/2026 Turno: 1
+Operador..: MARCUS VINICIUS DO N CAMARGO
+Abertura..: 26/06/2026 05:48
+Fechamento: 26/06/2026 13:58
+
+ENTRADAS
+VENDA DE PRODUTOS                         11115.26
+Total...................................  11115.26
+
+SAIDAS
+ABASTECE AI  CARTAO                         247.90
+ELO DEBITO                                  250.48
+
+MAESTRO                                      51.00
+MASTERCARD                                  250.73
+QRLINX - PIX SMART                          910.86
+SANGRIA DINHEIRO                           1250.00
+TEF - ELO CREDITO                           172.88
+TEF - ELO DEBITO                             30.00
+TEF - MAESTRO                              2143.83
+TEF - MASTERCARD                           3026.73
+TEF - VISA                                 1565.86
+TEF - VISA ELECTRON                        1159.12
+VISA CREDITO                                 50.00
+
+Formas de pagamento......................  9865.39
+Outras saidas............................  1250.00
+Total.................................... 11115.39
+Diferenca(Sobra)........................      0.13
