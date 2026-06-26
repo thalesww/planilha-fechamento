@@ -56,6 +56,13 @@ export function createEmptyOcrResult() {
       pixStone: "",
       notaPrazo: "",
       sangria: ""
+    },
+    sobra: "",
+    validation: {
+      isValid: false,
+      expectedSobra: 0,
+      recognizedSobra: 0,
+      difference: 0
     }
   };
 }
@@ -86,6 +93,8 @@ export function parseReceiptOcrText(text) {
 
     if (line.includes("VENDA") && line.includes("PRODUT")) {
       if (!result.vendaProdutos) result.vendaProdutos = value;
+    } else if (line.includes("SOBRA")) {
+      if (!result.sobra) result.sobra = value;
     } else if (line.includes("ABASTECE") || line.includes("RIE CARTAY")) {
       setIfEmpty(result, "extras", "abasteceAi", value);
     } else if (line.includes("QRL") || line.includes("PIX") || line.includes("RLINX")) {

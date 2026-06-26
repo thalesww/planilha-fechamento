@@ -150,6 +150,43 @@ const SAMPLE_VALUES = {
   }
 };
 
+function roundCurrency(value) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function validateOcrResult(parsed) {
+  const cardsTotal = Object.values(parsed.cards).flat().reduce((total, value) => total + parseMoney(value), 0);
+  const extrasTotal = Object.values(parsed.extras).reduce((total, value) => total + parseMoney(value), 0);
+  const vendaProdutos = parseMoney(parsed.vendaProdutos);
+  const expectedSobra = roundCurrency(cardsTotal + extrasTotal - vendaProdutos);
+  const recognizedSobra = roundCurrency(parseMoney(parsed.sobra));
+  const difference = roundCurrency(Math.abs(expectedSobra - recognizedSobra));
+
+  return {
+    ...parsed,
+    validation: {
+      isValid: Boolean(parsed.sobra) && difference <= 0.01,
+      expectedSobra,
+      recognizedSobra,
+      difference
+    }
+  };
+}
+
+function compareOcrAttempts(current, candidate) {
+  if (!current) return candidate;
+  if (candidate.parsed.validation.isValid !== current.parsed.validation.isValid) {
+    return candidate.parsed.validation.isValid ? candidate : current;
+  }
+  if (candidate.foundValues !== current.foundValues) {
+    return candidate.foundValues > current.foundValues ? candidate : current;
+  }
+  if (candidate.parsed.validation.difference !== current.parsed.validation.difference) {
+    return candidate.parsed.validation.difference < current.parsed.validation.difference ? candidate : current;
+  }
+  return current;
+}
+
 function createId() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
   return `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
@@ -684,24 +721,22 @@ function App() {
         }
       ];
 
-      let parsed = null;
-      let foundValues = 0;
+      let bestAttempt = null;
       for (let index = 0; index < attempts.length; index += 1) {
         const attempt = attempts[index];
         setOcrProgress(`Lendo ${attempt.label} (${index + 1}/${attempts.length})…`);
         const input = typeof attempt.input === "function" ? await attempt.input() : attempt.input;
         const ocrRead = await recognize(input, "eng", ocrOptions);
-        const attemptParsed = parseReceiptOcrText(ocrRead.data.text);
+        const attemptParsed = validateOcrResult(parseReceiptOcrText(ocrRead.data.text));
         const attemptFoundValues = countOcrValues(attemptParsed);
-
-        if (attemptFoundValues > foundValues) {
-          parsed = attemptParsed;
-          foundValues = attemptFoundValues;
-        }
+        bestAttempt = compareOcrAttempts(bestAttempt, {
+          parsed: attemptParsed,
+          foundValues: attemptFoundValues
+        });
       }
 
-      setOcrResult(parsed);
-      setOcrFoundCount(foundValues);
+      setOcrResult(bestAttempt?.parsed || null);
+      setOcrFoundCount(bestAttempt?.foundValues || 0);
       setOcrStatus("done");
     } catch {
       setOcrStatus("error");

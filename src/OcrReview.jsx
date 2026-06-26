@@ -67,6 +67,7 @@ export function OcrReviewPanel({ ocrResult, foundCount, totalFields, onConfirm, 
   const precision = Math.round((foundCount / totalFields) * 100);
   const precisionColor =
     precision >= 80 ? 'precision-high' : precision >= 50 ? 'precision-mid' : 'precision-low';
+  const validation = ocrResult?.validation;
 
   const cardRows = CARD_REVIEW_FIELDS
     .map(field => {
@@ -97,6 +98,20 @@ export function OcrReviewPanel({ ocrResult, foundCount, totalFields, onConfirm, 
           {precision}% precisão · {foundCount} de {totalFields} campos
         </div>
       </div>
+
+      {validation && !validation.isValid && (
+        <div className="ocr-validation-alert" role="alert">
+          <AlertTriangle size={22} />
+          <div>
+            <strong>Conferência matemática não bateu.</strong>
+            <p>
+              A sobra calculada pela soma dos campos menos venda de produtos é {formatCurrency(validation.expectedSobra)},
+              mas a sobra lida na notinha foi {formatCurrency(validation.recognizedSobra)}
+              (diferença de {formatCurrency(validation.difference)}). Confira e edite os campos antes de confirmar.
+            </p>
+          </div>
+        </div>
+      )}
 
       {foundCount === 0 ? (
         <div className="ocr-review-empty">
