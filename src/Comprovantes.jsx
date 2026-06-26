@@ -176,6 +176,8 @@ export default function Comprovantes({
     '',
     `Total Entradas: ${fmt(totals.entradas)}`,
     `Venda do Posto: ${fmt(totals.venda)}`,
+    `Sobra calculada: ${fmt(totals.diferenca)}`,
+    `Sobra informada: ${fmt(parseMoney(closing?.sobra))}`,
     `Troco Final: ${fmt(totals.diferenca)}`,
     '',
     '=== FECHAMENTO DAS MAQUININHAS ===',

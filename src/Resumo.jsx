@@ -1,6 +1,13 @@
 import React, { useState } from 'react';
 
-export default function Resumo({ lancamentos, totals, onCopy, onCsv, onPrint, onSave, onBack, formatCurrency }) {
+function parseMoney(value) {
+  if (!value) return 0;
+  const normalized = String(value).replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.');
+  const parsed = parseFloat(normalized);
+  return isFinite(parsed) ? parsed : 0;
+}
+
+export default function Resumo({ closing, lancamentos, totals, onCopy, onCsv, onPrint, onSave, onBack, formatCurrency }) {
   const [toastVisible, setToastVisible] = useState(false);
 
   const handleCopy = () => {
@@ -69,9 +76,13 @@ export default function Resumo({ lancamentos, totals, onCopy, onCsv, onPrint, on
             <span>Venda do Posto</span>
             <span className="text-label-numeric font-label-numeric font-bold">{formatCurrency(totals.venda)}</span>
           </div>
+          <div className="flex justify-between items-center">
+            <span>Sobra informada</span>
+            <span className="text-label-numeric font-label-numeric font-bold">{formatCurrency(parseMoney(closing?.sobra))}</span>
+          </div>
           <div className="h-px bg-primary/20 w-full"></div>
           <div className="flex justify-between items-center pt-1">
-            <span className="font-bold">Troco Final</span>
+            <span className="font-bold">Sobra calculada</span>
             <span className="text-display-currency font-display-currency">{formatCurrency(totals.diferenca)}</span>
           </div>
         </div>
