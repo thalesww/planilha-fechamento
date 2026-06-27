@@ -23,6 +23,10 @@ function parseMoney(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function roundCurrency(value) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
 function formatOcrNumeric(value) {
   if (!value) return "";
   const digits = String(value).replace(/\D/g, "");
@@ -62,6 +66,7 @@ export function createEmptyOcrResult() {
       isValid: false,
       expectedSobra: 0,
       recognizedSobra: 0,
+      hasRecognizedSobra: false,
       difference: 0
     }
   };
@@ -137,6 +142,44 @@ export function countOcrValues(result) {
   const cardCount = Object.values(result.cards).flat().filter(Boolean).length;
   const extraCount = Object.values(result.extras).filter(Boolean).length;
   return cardCount + extraCount + (result.vendaProdutos ? 1 : 0);
+}
+
+export function validateOcrResult(parsed) {
+  const cardsTotal = Object.values(parsed.cards).flat().reduce((total, value) => total + parseMoney(value), 0);
+  const extrasTotal = Object.values(parsed.extras).reduce((total, value) => total + parseMoney(value), 0);
+  const vendaProdutos = parseMoney(parsed.vendaProdutos);
+  const expectedSobra = roundCurrency(cardsTotal + extrasTotal - vendaProdutos);
+  const hasRecognizedSobra = Boolean(parsed.sobra);
+  const recognizedSobra = hasRecognizedSobra ? roundCurrency(parseMoney(parsed.sobra)) : null;
+  const difference = hasRecognizedSobra ? roundCurrency(Math.abs(expectedSobra - recognizedSobra)) : null;
+
+  return {
+    ...parsed,
+    validation: {
+      isValid: hasRecognizedSobra && difference <= 0.01,
+      expectedSobra,
+      recognizedSobra,
+      hasRecognizedSobra,
+      difference
+    }
+  };
+}
+
+export function compareOcrAttempts(current, candidate) {
+  if (!current) return candidate;
+  if (candidate.parsed.validation.isValid !== current.parsed.validation.isValid) {
+    return candidate.parsed.validation.isValid ? candidate : current;
+  }
+  if (candidate.foundValues !== current.foundValues) {
+    return candidate.foundValues > current.foundValues ? candidate : current;
+  }
+  if (candidate.parsed.validation.hasRecognizedSobra !== current.parsed.validation.hasRecognizedSobra) {
+    return candidate.parsed.validation.hasRecognizedSobra ? candidate : current;
+  }
+  if (candidate.parsed.validation.difference !== current.parsed.validation.difference) {
+    return candidate.parsed.validation.difference < current.parsed.validation.difference ? candidate : current;
+  }
+  return current;
 }
 
 export function applyOcrResultToClosing(currentClosing, ocrResult) {

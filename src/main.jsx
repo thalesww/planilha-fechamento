@@ -15,7 +15,13 @@ import {
   Trash2,
   WalletCards
 } from "lucide-react";
-import { applyOcrResultToClosing, countOcrValues, parseReceiptOcrText } from "./receiptOcr.js";
+import {
+  applyOcrResultToClosing,
+  compareOcrAttempts,
+  countOcrValues,
+  parseReceiptOcrText,
+  validateOcrResult
+} from "./receiptOcr.js";
 import Home from "./Home.jsx";
 import Resumo from "./Resumo.jsx";
 import Comprovantes from "./Comprovantes.jsx";
@@ -149,43 +155,6 @@ const SAMPLE_VALUES = {
     sangria: "1.595,00"
   }
 };
-
-function roundCurrency(value) {
-  return Math.round((value + Number.EPSILON) * 100) / 100;
-}
-
-function validateOcrResult(parsed) {
-  const cardsTotal = Object.values(parsed.cards).flat().reduce((total, value) => total + parseMoney(value), 0);
-  const extrasTotal = Object.values(parsed.extras).reduce((total, value) => total + parseMoney(value), 0);
-  const vendaProdutos = parseMoney(parsed.vendaProdutos);
-  const expectedSobra = roundCurrency(cardsTotal + extrasTotal - vendaProdutos);
-  const recognizedSobra = roundCurrency(parseMoney(parsed.sobra));
-  const difference = roundCurrency(Math.abs(expectedSobra - recognizedSobra));
-
-  return {
-    ...parsed,
-    validation: {
-      isValid: Boolean(parsed.sobra) && difference <= 0.01,
-      expectedSobra,
-      recognizedSobra,
-      difference
-    }
-  };
-}
-
-function compareOcrAttempts(current, candidate) {
-  if (!current) return candidate;
-  if (candidate.parsed.validation.isValid !== current.parsed.validation.isValid) {
-    return candidate.parsed.validation.isValid ? candidate : current;
-  }
-  if (candidate.foundValues !== current.foundValues) {
-    return candidate.foundValues > current.foundValues ? candidate : current;
-  }
-  if (candidate.parsed.validation.difference !== current.parsed.validation.difference) {
-    return candidate.parsed.validation.difference < current.parsed.validation.difference ? candidate : current;
-  }
-  return current;
-}
 
 function createId() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
