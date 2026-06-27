@@ -192,6 +192,7 @@ function createBlankClosing() {
 
 function normalizeClosing(raw) {
   const blank = createBlankClosing();
+  const { sobraInformada, ...rawWithoutLegacySobra } = raw || {};
   const cards = Object.fromEntries(
     CARD_FIELDS.map((field) => {
       const previous = raw?.cards?.[field.key];
@@ -204,11 +205,11 @@ function normalizeClosing(raw) {
 
   return {
     ...blank,
-    ...raw,
+    ...rawWithoutLegacySobra,
     cards,
     extras: { ...blank.extras, ...(raw?.extras || {}) },
     optionalExtras: { ...blank.optionalExtras, ...(raw?.optionalExtras || {}) },
-    sobra: raw?.sobra || blank.sobra,
+    sobra: raw?.sobra ?? sobraInformada ?? blank.sobra,
     diferencaSobra: raw?.diferencaSobra || blank.diferencaSobra,
     attachments: Array.isArray(raw?.attachments) ? raw.attachments : [],
     step: Number.isInteger(raw?.step) ? Math.min(Math.max(raw.step, 0), STEPS.length - 1) : 0,
@@ -452,6 +453,8 @@ function buildSummary(closing, totals) {
     "",
     `Total das entradas: ${formatCurrency(totals.entradas)}`,
     `Venda de produtos: ${formatCurrency(totals.venda)}`,
+    `Sobra calculada: ${formatCurrency(totals.diferenca)}`,
+    `Sobra informada: ${formatCurrency(parseMoney(closing.sobra))}`,
     `Troco final / diferenca: ${formatCurrency(totals.diferenca)}`,
     "",
     "CONFERENCIA DA NOTINHA",
@@ -853,6 +856,8 @@ function App() {
       ]),
       ["Total das entradas", formatNumber(totals.entradas)],
       ["Venda de produtos", formatNumber(totals.venda)],
+      ["Sobra calculada", formatNumber(totals.diferenca)],
+      ["Sobra informada", formatNumber(parseMoney(closing.sobra))],
       ["Troco final / diferenca", formatNumber(totals.diferenca)]
     ];
     const csv = rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(";")).join("\n");
@@ -912,6 +917,7 @@ function App() {
         />
       ) : currentStep.id === "resumo" ? (
         <Resumo
+          closing={closing}
           lancamentos={lancamentos}
           totals={totals}
           onCopy={copySummary}
@@ -1014,6 +1020,7 @@ function App() {
           closing={closing}
           totals={totals}
           onVenda={(value) => updateClosing({ vendaProdutos: toMoneyInput(value) })}
+          onSobra={(value) => updateClosing({ sobra: toMoneyInput(value) })}
           onObservations={(observations) => updateClosing({ observations })}
         />
       ) : null}
@@ -1230,7 +1237,10 @@ function ExtrasStep({ closing, totals, onExtraValue, onOptionalExtraValue }) {
   );
 }
 
-function VendaStep({ closing, totals, onVenda, onObservations }) {
+function VendaStep({ closing, totals, onVenda, onSobra, onObservations }) {
+  const sobraInformada = parseMoney(closing.sobra);
+  const sobraDivergente = closing.sobra && Math.abs(sobraInformada - totals.diferenca) >= 0.01;
+
   return (
     <section className="flow-section">
       <div className="instruction">
@@ -1238,6 +1248,7 @@ function VendaStep({ closing, totals, onVenda, onObservations }) {
         <p>Informe a venda total do posto do relatório. O troco final é a soma de tudo menos essa venda.</p>
       </div>
       <MoneyInput label="Venda do Posto" value={closing.vendaProdutos} onChange={onVenda} autoFocus />
+      <MoneyInput label="Sobra da nota" value={closing.sobra} onChange={onSobra} />
       <div className="calculation-card">
         <div>
           <span>Total das entradas</span>
@@ -1248,12 +1259,24 @@ function VendaStep({ closing, totals, onVenda, onObservations }) {
           <strong>{formatCurrency(totals.venda)}</strong>
         </div>
         <div>
-          <span>Troco final</span>
+          <span>Sobra calculada</span>
           <strong className={totals.diferenca < 0 ? "negative-text" : totals.diferenca > 0 ? "positive-text" : ""}>
             {formatCurrency(totals.diferenca)}
           </strong>
         </div>
+        <div>
+          <span>Sobra informada</span>
+          <strong>{formatCurrency(sobraInformada)}</strong>
+        </div>
       </div>
+      {sobraDivergente ? (
+        <div className="comp-warning" role="alert">
+          <span className="material-symbols-outlined">warning</span>
+          <span>
+            A sobra informada ({formatCurrency(sobraInformada)}) diverge da sobra calculada ({formatCurrency(totals.diferenca)}).
+          </span>
+        </div>
+      ) : null}
       <label className="notes-field">
         <span>Observacoes</span>
         <textarea
