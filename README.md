@@ -15,6 +15,8 @@ No celular, acesse o IP local do computador na mesma rede Wi-Fi:
 http://192.168.18.2:5174/
 ```
 
+Nesse endereco HTTP por IP local, navegadores de celular bloqueiam camera por nao ser uma origem segura. Para usar **Ler QR Code do fechamento**, publique o app em HTTPS na rede local ou abra por `localhost` no proprio aparelho; se estiver usando o endereco HTTP acima, use o fallback da tela e cole o conteudo codificado copiado no computador.
+
 ## Testes
 
 Build de producao:
