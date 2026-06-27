@@ -20,13 +20,11 @@ import {
 } from "lucide-react";
 import {
   applyOcrResultToClosing,
-  compareOcrAttempts,
   countOcrValues,
   parseClosingText,
-  parseReceiptOcrText,
   resetClosingSobra,
-  validateOcrResult
 } from "./receiptOcr.js";
+import { recognizeReceiptImage } from "./services/ocr/recognizeReceiptImage.ts";
 import Home from "./Home.jsx";
 import Resumo from "./Resumo.jsx";
 import Comprovantes from "./Comprovantes.jsx";
@@ -768,47 +766,24 @@ function App() {
       updatedAt: new Date().toISOString()
     }));
 
-    // Auto-start OCR scan
     setOcrStatus("running");
-    setOcrProgress("Carregando motor OCR…");
+    setOcrProgress("Reconhecendo recibo...");
     setOcrResult(null);
     setOcrAttachmentId(encoded[0]?.id || "");
 
     try {
-      const tesseractModule = await import("tesseract.js");
-      const recognize = tesseractModule.recognize || tesseractModule.default?.recognize;
-      if (!recognize) throw new Error("OCR indisponivel");
+      const recognized = await recognizeReceiptImage(selected[0], {
+        onProgress: setOcrProgress
+      });
 
-      const ocrOptions = { tessedit_pageseg_mode: "6" };
-      const attempts = [
-        { label: "imagem original", input: selected[0] },
-        {
-          label: "notinha recortada",
-          input: () => preprocessForOcr(selected[0], { crop: true, contrast: false })
-        },
-        {
-          label: "notinha recortada com contraste",
-          input: () => preprocessForOcr(selected[0], { crop: true, contrast: true })
-        }
-      ];
-
-      let bestAttempt = null;
-      for (let index = 0; index < attempts.length; index += 1) {
-        const attempt = attempts[index];
-        setOcrProgress(`Lendo ${attempt.label} (${index + 1}/${attempts.length})…`);
-        const input = typeof attempt.input === "function" ? await attempt.input() : attempt.input;
-        const ocrRead = await recognize(input, "eng", ocrOptions);
-        const attemptParsed = validateOcrResult(parseReceiptOcrText(ocrRead.data.text));
-        const attemptFoundValues = countOcrValues(attemptParsed);
-        bestAttempt = compareOcrAttempts(bestAttempt, {
-          parsed: attemptParsed,
-          foundValues: attemptFoundValues
-        });
-      }
-
-      setOcrResult(bestAttempt?.parsed || null);
-      setOcrFoundCount(bestAttempt?.foundValues || 0);
+      setOcrResult(recognized.legacy || null);
+      setOcrFoundCount(recognized.foundCount || 0);
       setOcrStatus("done");
+      setMessage(
+        recognized.usedFallback
+          ? "OCR remoto indisponivel. Usando reconhecimento local."
+          : "Reconhecimento concluido pelo OCR remoto."
+      );
     } catch {
       setOcrStatus("error");
       setMessage("Nao consegui ler a notinha por OCR. A foto foi anexada. Preencha manualmente.");
