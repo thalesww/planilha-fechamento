@@ -37,6 +37,18 @@ Para usar outra imagem no teste OCR, sobrescreva o fixture padrao:
 OCR_TEST_IMAGE="C:/caminho/para/notinha.jpg" npm run test:ocr
 ```
 
+## OCR remoto
+
+O PWA envia a imagem para o backend principal, nao diretamente para o app Python de OCR:
+
+```env
+VITE_OCR_API_URL=https://autoentregabackend.squareweb.app/api
+VITE_OCR_API_KEY=chave-configurada-em-OCR_API_KEYS
+VITE_OCR_TIMEOUT_MS=20000
+```
+
+O backend principal recebe `POST /api/ocr/receipt` e encaminha internamente para o OCRBackend (`https://ocrbackend.squareweb.app`). Se o backend remoto falhar, o app usa o OCR local automaticamente.
+
 ## Fluxo do app
 
 - A etapa `Notinha` mostra um campo por vez, focando em dois valores possiveis para somar no campo final da planilha.
