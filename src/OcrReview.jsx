@@ -106,8 +106,9 @@ export function OcrReviewPanel({ ocrResult, foundCount, totalFields, onConfirm, 
             <strong>Conferência matemática não bateu.</strong>
             <p>
               A sobra calculada pela soma dos campos menos venda de produtos é {formatCurrency(validation.expectedSobra)},
-              mas a sobra lida na notinha foi {formatCurrency(validation.recognizedSobra)}
-              (diferença de {formatCurrency(validation.difference)}). Confira e edite os campos antes de confirmar.
+              {validation.hasRecognizedSobra
+                ? ` mas a sobra lida na notinha foi ${formatCurrency(validation.recognizedSobra)} (diferença de ${formatCurrency(validation.difference)}).`
+                : " mas a sobra nao foi lida na notinha."} Confira e edite os campos antes de confirmar.
             </p>
           </div>
         </div>
