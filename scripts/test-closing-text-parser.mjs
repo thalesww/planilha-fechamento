@@ -28,6 +28,8 @@ assert.deepEqual(parsedTurno2.cards.visaCredito, ["2.056,38", "130,00"]);
 assert.equal(parsedTurno2.vendaProdutos, "14.587,04");
 assert.equal(parsedTurno2.extras.sangria, "1.294,00");
 assert.equal(parsedTurno2.sobra, "-131,48");
+assert.ok(!Object.values(parsedTurno2.extras).includes("200,00"));
+assert.ok(!Object.values(parsedTurno2.optionalExtras).includes("200,00"));
 
 const focusedText = `
 2o valor ELO Credito 123,45
