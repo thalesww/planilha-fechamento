@@ -61,7 +61,6 @@ export function OcrLoadingOverlay({ progress }) {
     </div>
   );
 }
-
 // ── Result panel ───────────────────────────────────────────────────────────────
 export function OcrReviewPanel({
   ocrResult,
@@ -197,7 +196,6 @@ export function OcrReviewPanel({
             </div>
           ))}
 
-
           {/* Sobra / diferenca */}
           <div className="ocr-review-item">
             <div className="ocr-review-item-label">Sobra / diferença</div>
@@ -215,6 +213,12 @@ export function OcrReviewPanel({
               </div>
             </div>
           </div>
+          {ocrResult?.ocrInconsistent && (
+            <div className="ocr-review-empty">
+              <AlertTriangle size={24} />
+              <p>Valores do OCR inconsistentes: a sobra reconhecida nao bate com cartoes + extras - venda produtos.</p>
+            </div>
+          )}
       </div>
 
       {/* Actions */}
@@ -231,3 +235,5 @@ export function OcrReviewPanel({
     </div>
   );
 }
+
+

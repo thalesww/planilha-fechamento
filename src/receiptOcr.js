@@ -27,17 +27,19 @@ function roundCurrency(value) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
-function formatOcrNumeric(value) {
+function formatOcrNumeric(value, { preserveSign = false } = {}) {
   if (!value) return "";
+  const isNegative = preserveSign && /-\s*\d/.test(String(value));
   const digits = String(value).replace(/\D/g, "");
   if (!digits) return "";
-  return formatNumber(Number(digits) / 100);
+  const amount = Number(digits) / 100;
+  return formatNumber(isNegative ? -amount : amount);
 }
 
-function extractAmountFromLine(line) {
-  const matches = line.match(/\d{1,3}(?:[.,]\d{3})*[.,]\d{2}|\d+[.,]\d{2}|\d{3,5}/g);
+function extractAmountFromLine(line, { preserveSign = false } = {}) {
+  const matches = line.match(/[+-]?\s*\d{1,3}(?:[.,]\d{3})*[.,]\d{2}|[+-]?\s*\d+[.,]\d{2}|[+-]?\s*\d{3,5}/g);
   if (!matches?.length) return "";
-  return formatOcrNumeric(matches[matches.length - 1]);
+  return formatOcrNumeric(matches[matches.length - 1], { preserveSign });
 }
 
 function isTefLine(line) {
@@ -63,7 +65,8 @@ export function createEmptyOcrResult() {
     },
     optionalExtras: {},
     sobra: "",
-    diferencaSobra: ""
+    diferencaSobra: "",
+    ocrInconsistent: false
   };
 }
 
@@ -200,6 +203,43 @@ export function parseClosingText(text) {
   return result;
 }
 
+function isSobraLine(line) {
+  return line.includes("DIFERENCA(SOBRA)")
+    || line.includes("DIFERENCA (SOBRA)")
+    || line.includes("DIFERENCA")
+    || line.includes("SOBRA");
+}
+
+const OCR_RECEIPT_TOTAL_TOLERANCE = 0.01;
+
+function sumMoneyValues(values) {
+  return values.reduce((total, value) => total + parseMoney(value), 0);
+}
+
+export function calculateOcrReceiptTotals(ocrResult) {
+  const cardTotal = Object.values(ocrResult?.cards || {})
+    .flat()
+    .reduce((total, value) => total + parseMoney(value), 0);
+  const extraTotal = sumMoneyValues(Object.values(ocrResult?.extras || {}));
+  const optionalExtraTotal = sumMoneyValues(Object.values(ocrResult?.optionalExtras || {}));
+  const vendaProdutos = parseMoney(ocrResult?.vendaProdutos);
+  const calculatedSobra = cardTotal + extraTotal + optionalExtraTotal - vendaProdutos;
+  const recognizedSobra = parseMoney(ocrResult?.sobra);
+  const difference = calculatedSobra - recognizedSobra;
+  const hasRecognizedSobra = Boolean(ocrResult?.sobra);
+
+  return {
+    cardTotal,
+    extraTotal,
+    optionalExtraTotal,
+    vendaProdutos,
+    calculatedSobra,
+    recognizedSobra,
+    difference,
+    isInconsistent: hasRecognizedSobra && Math.abs(difference) > OCR_RECEIPT_TOTAL_TOLERANCE
+  };
+}
+
 export function parseReceiptOcrText(text) {
   const result = createEmptyOcrResult();
   const normalized = normalizeOcrText(text);
@@ -209,16 +249,16 @@ export function parseReceiptOcrText(text) {
     .filter(Boolean);
 
   for (const line of lines) {
-    const value = extractAmountFromLine(line);
+    const value = extractAmountFromLine(line, { preserveSign: isSobraLine(line) });
     if (!value) continue;
 
-    if (line.includes("VENDA") && line.includes("PRODUT")) {
-      if (!result.vendaProdutos) result.vendaProdutos = value;
-    } else if (line.includes("SOBRA") || (line.includes("DIFER") && line.includes("SOBRA"))) {
+    if (isSobraLine(line)) {
       if (!result.sobra) {
         result.sobra = value;
         result.diferencaSobra = value;
       }
+    } else if (line.includes("VENDA") && line.includes("PRODUT")) {
+      if (!result.vendaProdutos) result.vendaProdutos = value;
     } else if (line.includes("ABASTECE") || line.includes("RIE CARTAY")) {
       setIfEmpty(result, "extras", "abasteceAi", value);
     } else if (line.includes("QRL") || line.includes("PIX") || line.includes("RLINX")) {
@@ -253,6 +293,10 @@ export function parseReceiptOcrText(text) {
       setIfEmpty(result, "cards", "visaDebito", 0, value);
     }
   }
+
+  const totals = calculateOcrReceiptTotals(result);
+  result.ocrInconsistent = totals.isInconsistent;
+  result.ocrTotals = totals;
 
   return result;
 }
