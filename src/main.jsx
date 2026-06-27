@@ -15,7 +15,7 @@ import {
   Trash2,
   WalletCards
 } from "lucide-react";
-import { applyOcrResultToClosing, countOcrValues, parseReceiptOcrText } from "./receiptOcr.js";
+import { applyOcrResultToClosing, countOcrValues, parseClosingText, parseReceiptOcrText } from "./receiptOcr.js";
 import Home from "./Home.jsx";
 import Resumo from "./Resumo.jsx";
 import Comprovantes from "./Comprovantes.jsx";
@@ -173,6 +173,7 @@ function createBlankClosing() {
     extras: Object.fromEntries(EXTRA_FIELDS.map((field) => [field.key, ""])),
     optionalExtras: Object.fromEntries(OPTIONAL_EXTRA_FIELDS.map((field) => [field.key, ""])),
     vendaProdutos: "",
+    sobra: "",
     observations: "",
     attachments: [],
     status: "rascunho",
@@ -198,6 +199,7 @@ function normalizeClosing(raw) {
     cards,
     extras: { ...blank.extras, ...(raw?.extras || {}) },
     optionalExtras: { ...blank.optionalExtras, ...(raw?.optionalExtras || {}) },
+    sobra: raw?.sobra || blank.sobra,
     attachments: Array.isArray(raw?.attachments) ? raw.attachments : [],
     step: Number.isInteger(raw?.step) ? Math.min(Math.max(raw.step, 0), STEPS.length - 1) : 0,
     cardIndex: Number.isInteger(raw?.cardIndex) ? Math.min(Math.max(raw.cardIndex, 0), CARD_FIELDS.length - 1) : 0,
@@ -817,6 +819,25 @@ function App() {
     URL.revokeObjectURL(url);
   }, [closing, totals]);
 
+
+  const importClosingText = useCallback((text) => {
+    const parsed = parseClosingText(text);
+    const foundValues = countOcrValues(parsed);
+
+    if (!foundValues) {
+      setMessage("Nenhum valor de fechamento foi encontrado no texto colado.");
+      return false;
+    }
+
+    setClosing((current) => ({
+      ...applyOcrResultToClosing(current, parsed, { overwrite: true }),
+      updatedAt: new Date().toISOString()
+    }));
+    setMessage(`${foundValues} valores do fechamento importados. Voce ainda pode editar manualmente.`);
+    setCurrentView("form");
+    return true;
+  }, []);
+
   const resetForm = useCallback(() => {
     setClosing(createBlankClosing());
     setComprovantes(BLANK_COMPROVANTES);
@@ -841,6 +862,7 @@ function App() {
           calculateTotals={calculateTotals}
           formatCurrency={formatCurrency}
           formatDate={formatDate}
+          onImportClosingText={importClosingText}
         />
       ) : currentStep.id === "resumo" ? (
         <Resumo
