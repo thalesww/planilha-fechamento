@@ -15,6 +15,17 @@ import {
   Trash2,
   WalletCards
 } from "lucide-react";
+import {
+  applyOcrResultToClosing,
+  compareOcrAttempts,
+  countOcrValues,
+  parseReceiptOcrText,
+  validateOcrResult
+} from "./receiptOcr.js";
+import Home from "./Home.jsx";
+import Resumo from "./Resumo.jsx";
+import Comprovantes from "./Comprovantes.jsx";
+import { OcrLoadingOverlay, OcrReviewPanel } from "./OcrReview.jsx";
 import "./styles.css";
 
 const DB_NAME = "fechamento-caixa-db";
@@ -23,11 +34,23 @@ const STORE = "closings";
 const DRAFT_KEY = "fechamento-caixa-draft-v1";
 
 const STEPS = [
-  { id: "notinha", label: "Notinha" },
-  { id: "extras", label: "Extras" },
-  { id: "venda", label: "Venda" },
-  { id: "resumo", label: "Resumo" }
+  { id: "notinha", label: "Cartões" },
+  { id: "extras", label: "Combustível" },
+  { id: "venda", label: "Venda Posto" },
+  { id: "resumo", label: "Resumo" },
+  { id: "comprovantes", label: "Comprovantes" }
 ];
+
+const BLANK_COMPROVANTES = {
+  terminals: [
+    { total: "", photos: [] },
+    { total: "", photos: [] },
+    { total: "", photos: [] },
+  ],
+  totalCofre: "",
+  coffrePhotos: [],
+  sangriaPhotos: [],
+};
 
 const CARD_GROUPS = [
   {
@@ -264,18 +287,6 @@ function toMoneyInput(value) {
   return formatNumber(Number(cents) / 100);
 }
 
-function toMoneyFromNumber(value) {
-  return value > 0 ? formatNumber(value) : "";
-}
-
-function formatOcrNumeric(value) {
-  if (!value) return "";
-  const digits = String(value).replace(/\D/g, "");
-  if (!digits) return "";
-  const normalized = digits.length <= 2 ? Number(digits) : Number(digits) / 100;
-  return toMoneyFromNumber(normalized);
-}
-
 function getCardFieldTotal(closing, key) {
   return (closing.cards[key] || []).reduce((sum, value) => sum + parseMoney(value), 0);
 }
@@ -293,87 +304,6 @@ function getSummaryItemValue(closing, item) {
   return getExtraTotal(closing, item.key);
 }
 
-function normalizeOcrText(text) {
-  return text
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toUpperCase()
-    .replace(/[|]/g, "I");
-}
-
-function extractAmountFromLine(line) {
-  const matches = line.match(/\d{1,3}(?:[.,]\d{3})*[.,]\d{2}|\d+[.,]\d{2}|\d{3,5}/g);
-  if (!matches?.length) return "";
-  return formatOcrNumeric(matches[matches.length - 1]);
-}
-
-function assignIfEmpty(target, section, key, indexOrValue, maybeValue) {
-  if (section === "cards") {
-    const index = indexOrValue;
-    const value = maybeValue;
-    if (value && !target.cards[key][index]) target.cards[key][index] = value;
-    return;
-  }
-
-  const value = indexOrValue;
-  if (value && !target[section][key]) target[section][key] = value;
-}
-
-function parseReceiptOcr(text, currentClosing) {
-  const next = normalizeClosing(currentClosing);
-  const lines = normalizeOcrText(text)
-    .split(/\r?\n/)
-    .map((line) => line.replace(/\s+/g, " ").trim())
-    .filter(Boolean);
-
-  for (const line of lines) {
-    const value = extractAmountFromLine(line);
-    if (!value) continue;
-
-    if (line.includes("VENDA") && line.includes("PRODUT")) {
-      if (!next.vendaProdutos) next.vendaProdutos = value;
-      continue;
-    }
-
-    if (line.includes("ABASTECE")) assignIfEmpty(next, "extras", "abasteceAi", value);
-    else if (line.includes("QRL") || line.includes("PIX")) assignIfEmpty(next, "extras", "pixStone", value);
-    else if (line.includes("NOTA") && line.includes("PRAZO")) assignIfEmpty(next, "extras", "notaPrazo", value);
-    else if (line.includes("SANGRIA")) assignIfEmpty(next, "extras", "sangria", value);
-    else if (line.includes("TEF") && line.includes("ELO") && line.includes("DEBIT")) {
-      assignIfEmpty(next, "cards", "eloDebito", 1, value);
-    } else if (!line.includes("TEF") && line.includes("ELO") && line.includes("DEBIT")) {
-      assignIfEmpty(next, "cards", "eloDebito", 0, value);
-    } else if (line.includes("TEF") && line.includes("MAESTRO")) {
-      assignIfEmpty(next, "cards", "maestroDebito", 1, value);
-    } else if (!line.includes("TEF") && line.includes("MAESTRO")) {
-      assignIfEmpty(next, "cards", "maestroDebito", 0, value);
-    } else if (line.includes("TEF") && line.includes("VISA") && line.includes("ELECTRON")) {
-      assignIfEmpty(next, "cards", "visaDebito", 1, value);
-    } else if (!line.includes("TEF") && line.includes("VISA") && line.includes("DEBIT")) {
-      assignIfEmpty(next, "cards", "visaDebito", 0, value);
-    } else if (!line.includes("TEF") && line.includes("ELO") && line.includes("CREDIT")) {
-      assignIfEmpty(next, "cards", "eloCredito", 0, value);
-    } else if (line.includes("TEF") && line.includes("MASTERCARD")) {
-      assignIfEmpty(next, "cards", "mastercardCredito", 1, value);
-    } else if (!line.includes("TEF") && (line.includes("MASTERCARD") || line.includes("MASTERC"))) {
-      assignIfEmpty(next, "cards", "mastercardCredito", 0, value);
-    } else if (line.includes("TEF") && line.includes("VISA") && !line.includes("ELECTRON")) {
-      assignIfEmpty(next, "cards", "visaCredito", 0, value);
-    } else if (!line.includes("TEF") && line.includes("VISA") && line.includes("CREDIT")) {
-      assignIfEmpty(next, "cards", "visaCredito", 1, value);
-    }
-  }
-
-  const normalized = lines.join("\n");
-  if (normalized.includes("20 109.10") && !next.cards.maestroDebito[0]) next.cards.maestroDebito[0] = "109,10";
-  if (normalized.includes("VISA ELECTRON 40.00") && !next.cards.visaDebito[0]) next.cards.visaDebito[0] = "40,00";
-  if (normalized.includes("RIE CARTAY") && !next.extras.abasteceAi) next.extras.abasteceAi = "473,39";
-  if (normalized.includes("ERCARD 220.00") && !next.extras.notaPrazo) next.extras.notaPrazo = "220,00";
-  if (normalized.includes("CREDITU 265.31") && !next.cards.visaCredito[1]) next.cards.visaCredito[1] = "265,31";
-
-  return next;
-}
-
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -383,7 +313,50 @@ function fileToDataUrl(file) {
   });
 }
 
-async function preprocessForOcr(file) {
+function getReceiptCropBounds(imageData, width, height) {
+  const data = imageData.data;
+  let minX = width;
+  let minY = height;
+  let maxX = 0;
+  let maxY = 0;
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const index = (y * width + x) * 4;
+      const r = data[index];
+      const g = data[index + 1];
+      const b = data[index + 2];
+      const brightness = (r + g + b) / 3;
+      const colorSpread = Math.max(r, g, b) - Math.min(r, g, b);
+      const looksLikePaperOrInk = brightness > 105 && colorSpread < 85;
+
+      if (looksLikePaperOrInk) {
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+      }
+    }
+  }
+
+  if (maxX <= minX || maxY <= minY) return { x: 0, y: 0, width, height };
+
+  const marginX = Math.floor(width * 0.03);
+  const marginY = Math.floor(height * 0.03);
+  const x = Math.max(0, minX - marginX);
+  const y = Math.max(0, minY - marginY);
+  const right = Math.min(width, maxX + marginX);
+  const bottom = Math.min(height, maxY + marginY);
+
+  return {
+    x,
+    y,
+    width: right - x,
+    height: bottom - y
+  };
+}
+
+async function preprocessForOcr(file, { crop = true, contrast = true } = {}) {
   const dataUrl = await fileToDataUrl(file);
   const image = await new Promise((resolve, reject) => {
     const img = new Image();
@@ -392,26 +365,45 @@ async function preprocessForOcr(file) {
     img.src = dataUrl;
   });
 
-  const cropTop = Math.floor(image.height * 0.18);
-  const cropBottom = Math.floor(image.height * 0.88);
-  const cropHeight = cropBottom - cropTop;
-  const scale = Math.min(2.4, Math.max(1.6, 1800 / image.width));
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.floor(image.width * scale);
-  canvas.height = Math.floor(cropHeight * scale);
-  const ctx = canvas.getContext("2d", { willReadFrequently: true });
-  ctx.drawImage(image, 0, cropTop, image.width, cropHeight, 0, 0, canvas.width, canvas.height);
-
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const data = imageData.data;
-  for (let i = 0; i < data.length; i += 4) {
-    const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-    const boosted = gray < 150 ? Math.max(0, gray * 0.55) : Math.min(255, gray * 1.22);
-    data[i] = boosted;
-    data[i + 1] = boosted;
-    data[i + 2] = boosted;
+  let cropBounds = { x: 0, y: 0, width: image.width, height: image.height };
+  if (crop) {
+    const probeCanvas = document.createElement("canvas");
+    probeCanvas.width = image.width;
+    probeCanvas.height = image.height;
+    const probeCtx = probeCanvas.getContext("2d", { willReadFrequently: true });
+    probeCtx.drawImage(image, 0, 0);
+    cropBounds = getReceiptCropBounds(probeCtx.getImageData(0, 0, image.width, image.height), image.width, image.height);
   }
-  ctx.putImageData(imageData, 0, 0);
+
+  const scale = Math.min(2.6, Math.max(1.6, 1900 / cropBounds.width));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.floor(cropBounds.width * scale);
+  canvas.height = Math.floor(cropBounds.height * scale);
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  ctx.drawImage(
+    image,
+    cropBounds.x,
+    cropBounds.y,
+    cropBounds.width,
+    cropBounds.height,
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  );
+
+  if (contrast) {
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    for (let i = 0; i < data.length; i += 4) {
+      const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+      const boosted = gray < 155 ? Math.max(0, gray * 0.5) : Math.min(255, gray * 1.25);
+      data[i] = boosted;
+      data[i + 1] = boosted;
+      data[i + 2] = boosted;
+    }
+    ctx.putImageData(imageData, 0, 0);
+  }
 
   return canvas.toDataURL("image/png");
 }
@@ -480,11 +472,37 @@ function App() {
   });
   const [history, setHistory] = useState([]);
   const [message, setMessage] = useState("");
-  const [isOcrRunning, setIsOcrRunning] = useState(false);
+  const [currentView, setCurrentView] = useState("home");
+  // OCR state
+  const [ocrStatus, setOcrStatus] = useState("idle"); // idle | running | done | error
+  const [ocrProgress, setOcrProgress] = useState("");
+  const [ocrResult, setOcrResult] = useState(null); // raw parsed result before confirmation
+  const [ocrFoundCount, setOcrFoundCount] = useState(0);
+  const TOTAL_OCR_FIELDS = 13; // 6 card pairs * 2 + 4 extras
+  // Comprovantes state
+  const [comprovantes, setComprovantes] = useState(BLANK_COMPROVANTES);
 
   const totals = useMemo(() => calculateTotals(closing), [closing]);
   const summary = useMemo(() => buildSummary(closing, totals), [closing, totals]);
   const currentStep = STEPS[closing.step];
+
+  const lancamentos = useMemo(() => {
+    if (currentStep.id !== "resumo") return [];
+    const list = [];
+    CARD_FIELDS.forEach(field => {
+      const total = getCardFieldTotal(closing, field.key);
+      if (total > 0) list.push({ label: field.sheetLabel || field.label, value: formatCurrency(total) });
+    });
+    EXTRA_FIELDS.forEach(field => {
+      const total = getExtraTotal(closing, field.key);
+      if (total > 0) list.push({ label: field.label, value: formatCurrency(total) });
+    });
+    OPTIONAL_EXTRA_FIELDS.forEach(field => {
+      const total = getOptionalExtraTotal(closing, field.key);
+      if (total > 0) list.push({ label: field.label, value: formatCurrency(total) });
+    });
+    return list;
+  }, [closing, currentStep.id]);
 
   const refreshHistory = useCallback(() => {
     loadClosings()
@@ -555,6 +573,12 @@ function App() {
       return;
     }
 
+    if (closing.step === 0 && closing.cardIndex === 0) {
+      setCurrentView("home");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
     goToStep(closing.step - 1);
   }, [closing.cardIndex, closing.extraIndex, closing.step, currentStep.id, goToStep]);
 
@@ -614,6 +638,81 @@ function App() {
     setMessage("Exemplo da notinha aplicado para conferencia.");
   }, []);
 
+  const attachAndScan = useCallback(async (files) => {
+    const selected = Array.from(files || []);
+    if (!selected.length) return;
+
+    // Encode files for preview
+    const encoded = await Promise.all(
+      selected.map((file) =>
+        new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () =>
+            resolve({
+              id: createId(),
+              name: file.name,
+              size: file.size,
+              dataUrl: reader.result,
+              addedAt: new Date().toISOString()
+            });
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        })
+      )
+    );
+
+    setClosing((current) => ({
+      ...current,
+      attachments: [...current.attachments, ...encoded],
+      updatedAt: new Date().toISOString()
+    }));
+
+    // Auto-start OCR scan
+    setOcrStatus("running");
+    setOcrProgress("Carregando motor OCR…");
+    setOcrResult(null);
+
+    try {
+      const tesseractModule = await import("tesseract.js");
+      const recognize = tesseractModule.recognize || tesseractModule.default?.recognize;
+      if (!recognize) throw new Error("OCR indisponivel");
+
+      const ocrOptions = { tessedit_pageseg_mode: "6" };
+      const attempts = [
+        { label: "imagem original", input: selected[0] },
+        {
+          label: "notinha recortada",
+          input: () => preprocessForOcr(selected[0], { crop: true, contrast: false })
+        },
+        {
+          label: "notinha recortada com contraste",
+          input: () => preprocessForOcr(selected[0], { crop: true, contrast: true })
+        }
+      ];
+
+      let bestAttempt = null;
+      for (let index = 0; index < attempts.length; index += 1) {
+        const attempt = attempts[index];
+        setOcrProgress(`Lendo ${attempt.label} (${index + 1}/${attempts.length})…`);
+        const input = typeof attempt.input === "function" ? await attempt.input() : attempt.input;
+        const ocrRead = await recognize(input, "eng", ocrOptions);
+        const attemptParsed = validateOcrResult(parseReceiptOcrText(ocrRead.data.text));
+        const attemptFoundValues = countOcrValues(attemptParsed);
+        bestAttempt = compareOcrAttempts(bestAttempt, {
+          parsed: attemptParsed,
+          foundValues: attemptFoundValues
+        });
+      }
+
+      setOcrResult(bestAttempt?.parsed || null);
+      setOcrFoundCount(bestAttempt?.foundValues || 0);
+      setOcrStatus("done");
+    } catch {
+      setOcrStatus("error");
+      setMessage("Nao consegui ler a notinha por OCR. A foto foi anexada. Preencha manualmente.");
+    }
+  }, []);
+
   const attachFiles = useCallback(async (files) => {
     const selected = Array.from(files || []);
     if (!selected.length) return;
@@ -635,48 +734,33 @@ function App() {
           })
       )
     );
-
     setClosing((current) => ({
       ...current,
       attachments: [...current.attachments, ...encoded],
       updatedAt: new Date().toISOString()
     }));
-    setMessage("Foto anexada sem apagar os valores digitados.");
   }, []);
 
-  const runOcr = useCallback(
-    async (files) => {
-      const selected = Array.from(files || []);
-      if (!selected.length) return;
+  const confirmOcr = useCallback(() => {
+    if (!ocrResult) return;
+    setClosing((current) => ({
+      ...applyOcrResultToClosing(current, ocrResult),
+      updatedAt: new Date().toISOString()
+    }));
+    setOcrStatus("idle");
+    setOcrResult(null);
+    setMessage("Valores do OCR aplicados. Confira campo a campo.");
+  }, [ocrResult]);
 
-      await attachFiles(selected);
-      setIsOcrRunning(true);
-      setMessage("Lendo notinha por OCR. Confira os valores depois.");
+  const discardOcr = useCallback(() => {
+    setOcrStatus("idle");
+    setOcrResult(null);
+    setMessage("OCR descartado. Preencha os valores manualmente.");
+  }, []);
 
-      try {
-        const tesseractModule = await import("tesseract.js");
-        const recognize = tesseractModule.recognize || tesseractModule.default?.recognize;
-        if (!recognize) throw new Error("OCR indisponivel");
-
-        const preparedImage = await preprocessForOcr(selected[0]);
-        const result = await recognize(preparedImage, "eng", {
-          tessedit_pageseg_mode: "6",
-          tessedit_char_whitelist:
-            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,:/-() çÇãÃáÁéÉíÍóÓúÚ"
-        });
-        setClosing((current) => ({
-          ...parseReceiptOcr(result.data.text, current),
-          updatedAt: new Date().toISOString()
-        }));
-        setMessage("OCR finalizado. Confira campo por campo antes de fechar.");
-      } catch {
-        setMessage("Nao consegui ler a notinha por OCR. A foto foi anexada e seus valores foram mantidos.");
-      } finally {
-        setIsOcrRunning(false);
-      }
-    },
-    [attachFiles]
-  );
+  const updateComprovantes = useCallback((patch) => {
+    setComprovantes((prev) => ({ ...prev, ...patch }));
+  }, []);
 
   const removeAttachment = useCallback((id) => {
     setClosing((current) => ({
@@ -688,6 +772,7 @@ function App() {
   const loadFromHistory = useCallback((item) => {
     setClosing(normalizeClosing(item));
     setMessage("Fechamento aberto para revisao.");
+    setCurrentView("form");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
@@ -738,24 +823,78 @@ function App() {
 
   const resetForm = useCallback(() => {
     setClosing(createBlankClosing());
+    setComprovantes(BLANK_COMPROVANTES);
+    setOcrStatus("idle");
+    setOcrResult(null);
     localStorage.removeItem(DRAFT_KEY);
     setMessage("Novo fechamento iniciado.");
+    setCurrentView("form");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
   return (
-    <main className="app-shell">
-      <header className="hero">
+    <>
+      {ocrStatus === "running" && <OcrLoadingOverlay progress={ocrProgress} />}
+      {currentView === "home" ? (
+        <Home 
+          closing={closing} 
+          updateClosing={updateClosing} 
+          history={history} 
+          onNew={resetForm} 
+          onLoadHistory={loadFromHistory}
+          calculateTotals={calculateTotals}
+          formatCurrency={formatCurrency}
+          formatDate={formatDate}
+        />
+      ) : currentStep.id === "resumo" ? (
+        <Resumo
+          lancamentos={lancamentos}
+          totals={totals}
+          onCopy={copySummary}
+          onCsv={exportCsv}
+          onPrint={() => window.print()}
+          onSave={() => goToStep(STEPS.findIndex(s => s.id === "comprovantes"))}
+          onBack={previousStep}
+          formatCurrency={formatCurrency}
+        />
+      ) : currentStep.id === "comprovantes" ? (
+        <Comprovantes
+          closing={closing}
+          lancamentos={lancamentos}
+          totals={totals}
+          comprovantes={comprovantes}
+          onUpdateComp={updateComprovantes}
+          onSave={async () => { await persist("concluido"); setCurrentView("home"); setComprovantes(BLANK_COMPROVANTES); }}
+          onBack={previousStep}
+          formatCurrencyProp={formatCurrency}
+        />
+      ) : (
+        <main className="app-shell">
+      <header className="top-app-bar">
         <div className="hero-top">
           <ReceiptText size={24} />
           <div>
             <span>Postos Vila</span>
-            <h1>Fechamento de Caixa</h1>
+            <h1>Fechamento de Turno</h1>
           </div>
           <button type="button" onClick={resetForm} aria-label="Novo fechamento">
             <Plus size={20} />
           </button>
         </div>
+
+        <section className="stepper" aria-label="Etapas do fechamento">
+          {STEPS.map((step, index) => (
+            <button
+              key={step.id}
+              type="button"
+              className={index === closing.step ? "active" : index < closing.step ? "done" : ""}
+              onClick={() => goToStep(index)}
+            >
+              <span />
+              {step.label}
+            </button>
+          ))}
+        </section>
 
         <div className="meta-row">
           <label>
@@ -774,20 +913,6 @@ function App() {
         </div>
       </header>
 
-      <section className="stepper" aria-label="Etapas do fechamento">
-        {STEPS.map((step, index) => (
-          <button
-            key={step.id}
-            type="button"
-            className={index === closing.step ? "active" : index < closing.step ? "done" : ""}
-            onClick={() => goToStep(index)}
-          >
-            <span>{index + 1}</span>
-            {step.label}
-          </button>
-        ))}
-      </section>
-
       {message ? <div className="toast">{message}</div> : null}
 
       {currentStep.id === "notinha" ? (
@@ -795,11 +920,15 @@ function App() {
           closing={closing}
           totals={totals}
           onCardValue={updateCardValue}
-          onAttach={attachFiles}
-          onOcr={runOcr}
+          onAttach={attachAndScan}
           onRemoveAttachment={removeAttachment}
           onFillExample={fillExample}
-          isOcrRunning={isOcrRunning}
+          ocrStatus={ocrStatus}
+          ocrResult={ocrResult}
+          ocrFoundCount={ocrFoundCount}
+          TOTAL_OCR_FIELDS={TOTAL_OCR_FIELDS}
+          onConfirmOcr={confirmOcr}
+          onDiscardOcr={discardOcr}
         />
       ) : null}
 
@@ -821,32 +950,13 @@ function App() {
         />
       ) : null}
 
-      {currentStep.id === "resumo" ? (
-        <ResumoStep
-          closing={closing}
-          history={history}
-          totals={totals}
-          summary={summary}
-          onCopy={copySummary}
-          onCsv={exportCsv}
-          onPrint={() => window.print()}
-          onSave={() => persist("concluido")}
-          onLoadHistory={loadFromHistory}
-          onDuplicate={duplicateClosing}
-          onDelete={async (id) => {
-            await deleteClosing(id);
-            refreshHistory();
-          }}
-        />
-      ) : null}
-
       <nav className="bottom-nav" aria-label="Navegacao do fechamento">
-        <button type="button" onClick={previousStep} disabled={closing.step === 0 && closing.cardIndex === 0}>
+        <button type="button" onClick={previousStep}>
           <ArrowLeft size={18} />
           Voltar
         </button>
         <div>
-          <span>{currentStep.id === "venda" || currentStep.id === "resumo" ? "Troco final" : "Total parcial"}</span>
+          <span>{currentStep.id === "venda" || currentStep.id === "resumo" ? "Troco final" : "Total Cartoes"}</span>
           <strong className={totals.diferenca < 0 ? "negative-text" : totals.diferenca > 0 ? "positive-text" : ""}>
             {currentStep.id === "venda" || currentStep.id === "resumo"
               ? formatCurrency(totals.diferenca)
@@ -855,11 +965,7 @@ function App() {
         </div>
         {closing.step < STEPS.length - 1 ? (
           <button className="primary" type="button" onClick={nextStep}>
-            {currentStep.id === "notinha" && closing.cardIndex < CARD_FIELDS.length - 1
-              ? "Prox. campo"
-              : currentStep.id === "extras" && closing.extraIndex < EXTRA_FIELDS.length - 1
-                ? "Prox. extra"
-                : "Proximo"}
+            Proximo
             <ArrowRight size={18} />
           </button>
         ) : (
@@ -870,26 +976,93 @@ function App() {
         )}
       </nav>
     </main>
+      )}
+    </>
   );
 }
 
-function NotinhaStep({ closing, totals, onCardValue, onAttach, onOcr, onRemoveAttachment, onFillExample, isOcrRunning }) {
+function NotinhaStep({
+  closing,
+  totals,
+  onCardValue,
+  onAttach,
+  onRemoveAttachment,
+  onFillExample,
+  ocrStatus,
+  ocrResult,
+  ocrFoundCount,
+  TOTAL_OCR_FIELDS,
+  onConfirmOcr,
+  onDiscardOcr
+}) {
   const activeField = CARD_FIELDS[closing.cardIndex];
 
   return (
     <section className="flow-section">
-      <div className="instruction">
-        <ReceiptText size={24} />
-        <p>Digite os valores como aparecem na notinha. O app soma no campo da planilha.</p>
-      </div>
-
-      <div className="section-heading">
-        <WalletCards size={20} />
-        <div>
-          <h2>Cartoes da notinha</h2>
-          <span>Total dos cartoes: {formatCurrency(totals.cardTotal)}</span>
+      <section className="ocr-card">
+        <div className="section-heading split">
+          <div>
+            <Camera size={20} />
+            <h2>Captura OCR</h2>
+          </div>
+          <span className="beta-chip">Processamento Beta</span>
         </div>
-      </div>
+        <div className="capture-grid">
+          <label className="attach-compact">
+            <Camera size={18} />
+            Tirar Foto
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              multiple
+              onChange={(event) => {
+                onAttach(event.target.files);
+                event.target.value = "";
+              }}
+            />
+          </label>
+          <label className="attach-compact">
+            <FileDown size={18} />
+            Galeria
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={(event) => {
+                onAttach(event.target.files);
+                event.target.value = "";
+              }}
+            />
+          </label>
+        </div>
+
+        {closing.attachments.length ? (
+          <div className="thumbs">
+            {closing.attachments.map((attachment) => (
+              <figure key={attachment.id}>
+                <img src={attachment.dataUrl} alt={attachment.name} />
+                <figcaption>{attachment.name}</figcaption>
+                <button type="button" onClick={() => onRemoveAttachment(attachment.id)} aria-label="Remover anexo">
+                  <Trash2 size={15} />
+                </button>
+              </figure>
+            ))}
+          </div>
+        ) : null}
+
+        {ocrStatus === "done" && ocrResult && (
+          <div style={{ marginTop: "16px" }}>
+            <OcrReviewPanel
+              ocrResult={ocrResult}
+              foundCount={ocrFoundCount}
+              totalFields={TOTAL_OCR_FIELDS}
+              onConfirm={onConfirmOcr}
+              onDiscard={onDiscardOcr}
+            />
+          </div>
+        )}
+      </section>
 
       <div className="focus-progress">
         <span>{activeField.groupTitle}</span>
@@ -898,87 +1071,40 @@ function NotinhaStep({ closing, totals, onCardValue, onAttach, onOcr, onRemoveAt
         </strong>
       </div>
 
-      <FinalField
-        field={activeField}
-        values={closing.cards[activeField.key]}
-        total={getCardFieldTotal(closing, activeField.key)}
-        onChange={(index, value) => onCardValue(activeField.key, index, value)}
-      />
+      {CARD_GROUPS.map((group) => (
+        <CardGroupSection
+          key={group.title}
+          group={group}
+          activeKey={activeField.key}
+          cards={closing.cards}
+          onCardValue={onCardValue}
+        />
+      ))}
 
-      <div className="utility-row">
-        <label className="attach-compact">
-          <Camera size={18} />
-          Anexar pela camera
-          <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            multiple
-            onChange={(event) => {
-              onAttach(event.target.files);
-              event.target.value = "";
-            }}
+      <button className="example-button" type="button" onClick={onFillExample}>
+        <CheckCircle2 size={18} />
+        Usar exemplo
+      </button>
+    </section>
+  );
+}
+
+function CardGroupSection({ group, activeKey, cards, onCardValue }) {
+  return (
+    <section className="payment-section">
+      <h3>{group.title}</h3>
+      <div className="payment-list">
+        {group.fields.map((field) => (
+          <FinalField
+            key={field.key}
+            field={field}
+            values={cards[field.key]}
+            total={getCardFieldTotal({ cards }, field.key)}
+            active={field.key === activeKey}
+            onChange={(index, value) => onCardValue(field.key, index, value)}
           />
-        </label>
-        <label className="attach-compact">
-          <Camera size={18} />
-          Adicionar da galeria
-          <input
-            type="file"
-            accept="image/*"
-            multiple
-            onChange={(event) => {
-              onAttach(event.target.files);
-              event.target.value = "";
-            }}
-          />
-        </label>
-        <label className={`attach-compact ${isOcrRunning ? "busy" : ""}`}>
-          <ReceiptText size={18} />
-          {isOcrRunning ? "Lendo OCR..." : "OCR pela camera"}
-          <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            disabled={isOcrRunning}
-            onChange={(event) => {
-              onOcr(event.target.files);
-              event.target.value = "";
-            }}
-          />
-        </label>
-        <label className={`attach-compact ${isOcrRunning ? "busy" : ""}`}>
-          <ReceiptText size={18} />
-          {isOcrRunning ? "Lendo OCR..." : "OCR da galeria"}
-          <input
-            type="file"
-            accept="image/*"
-            disabled={isOcrRunning}
-            onChange={(event) => {
-              onOcr(event.target.files);
-              event.target.value = "";
-            }}
-          />
-        </label>
-        <button type="button" onClick={onFillExample}>
-          <CheckCircle2 size={18} />
-          Usar exemplo
-        </button>
+        ))}
       </div>
-
-      {closing.attachments.length ? (
-        <div className="thumbs">
-          {closing.attachments.map((attachment) => (
-            <figure key={attachment.id}>
-              <img src={attachment.dataUrl} alt={attachment.name} />
-              <figcaption>{attachment.name}</figcaption>
-              <button type="button" onClick={() => onRemoveAttachment(attachment.id)} aria-label="Remover anexo">
-                <Trash2 size={15} />
-              </button>
-            </figure>
-          ))}
-        </div>
-      ) : null}
     </section>
   );
 }
@@ -1033,16 +1159,16 @@ function VendaStep({ closing, totals, onVenda, onObservations }) {
     <section className="flow-section">
       <div className="instruction">
         <ReceiptText size={24} />
-        <p>Informe a venda de produtos do relatorio. O troco final e a soma de tudo menos essa venda.</p>
+        <p>Informe a venda total do posto do relatório. O troco final é a soma de tudo menos essa venda.</p>
       </div>
-      <MoneyInput label="Venda de produtos" value={closing.vendaProdutos} onChange={onVenda} autoFocus />
+      <MoneyInput label="Venda do Posto" value={closing.vendaProdutos} onChange={onVenda} autoFocus />
       <div className="calculation-card">
         <div>
           <span>Total das entradas</span>
           <strong>{formatCurrency(totals.entradas)}</strong>
         </div>
         <div>
-          <span>Venda de produtos</span>
+          <span>Venda do Posto</span>
           <strong>{formatCurrency(totals.venda)}</strong>
         </div>
         <div>
@@ -1175,13 +1301,12 @@ function ResumoStep({ closing, history, totals, summary, onCopy, onCsv, onPrint,
   );
 }
 
-function FinalField({ field, values, total, onChange }) {
+function FinalField({ field, values, total, onChange, active = false }) {
   return (
-    <article className="final-field">
+    <article className={`final-field ${active ? "active" : ""}`}>
       <div className="final-field-head">
         <div>
-          <span>Campo da planilha</span>
-          <strong>{field.label}</strong>
+          <strong>{field.label.replace(" Debito", "").replace(" Credito", "")}</strong>
         </div>
         <div>
           <span>Total</span>
