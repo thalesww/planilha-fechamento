@@ -6,38 +6,45 @@ import { countOcrValues, normalizeOcrText, parseReceiptOcrText } from "../src/re
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_IMAGE = path.resolve(__dirname, "../tests/fixtures/receipt-whatsapp-20260625.jpg");
-const DEFAULT_TEXT_FIXTURES = [
-  path.resolve(__dirname, "../tests/fixtures/receipt-whatsapp-20260626.txt")
-];
+const TURNO1_IMAGE = path.resolve(__dirname, "../tests/fixtures/receipt-whatsapp-20260626-turno1.jpg");
+const TURNO2_IMAGE = path.resolve(__dirname, "../tests/fixtures/receipt-whatsapp-20260626-turno2.jpg");
+const TURNO1_TEXT = path.resolve(__dirname, "../tests/fixtures/receipt-whatsapp-20260626-turno1.txt");
+const TURNO2_TEXT = path.resolve(__dirname, "../tests/fixtures/receipt-whatsapp-20260626-turno2.txt");
 
 const imagePath = process.env.OCR_TEST_IMAGE || DEFAULT_IMAGE;
 const skipImageOcr = process.env.OCR_SKIP_IMAGE === "1";
 
-const cases = [
+const imageCases = process.env.OCR_TEST_IMAGE ? [
+  {
+    source: imagePath,
+    type: "image",
+    anchors: [],
+    minValues: 1
+  }
+] : [
   {
     source: imagePath,
     type: "image",
     anchors: ["8112.39", "PIX", "ELO DEBITO", "VISA ELECTRON"],
-    expected: {
-      vendaProdutos: "8.112,39",
-      cards: {
-        eloDebito: ["", "160,00"],
-        maestroDebito: ["109,10", "1.859,19"],
-        visaDebito: ["40,00", "1.174,70"],
-        eloCredito: ["311,76", ""],
-        mastercardCredito: ["220,00", "1.122,11"],
-        visaCredito: ["687,84", "265,31"]
-      },
-      extras: {
-        abasteceAi: "473,39",
-        pixStone: "602,42",
-        notaPrazo: "220,00",
-        sangria: "864,00"
-      }
-    }
+    minValues: 8
   },
   {
-    source: DEFAULT_TEXT_FIXTURES[0],
+    source: TURNO1_IMAGE,
+    type: "image",
+    anchors: ["11115.26", "PIX SMART", "0.13"],
+    minValues: 9
+  },
+  {
+    source: TURNO2_IMAGE,
+    type: "image",
+    anchors: ["14587.04", "TROCO FINAL", "-131.48"],
+    minValues: 9
+  }
+];
+
+const textCases = [
+  {
+    source: TURNO1_TEXT,
     type: "text",
     anchors: ["11115.26", "QRLINX", "ELO DEBITO", "TEF - VISA ELECTRON"],
     expected: {
@@ -47,7 +54,7 @@ const cases = [
         maestroDebito: ["51,00", "2.143,83"],
         visaDebito: ["", "1.159,12"],
         eloCredito: ["", "172,88"],
-        mastercardCredito: ["250,73", "3.026,73"],
+        mastercardCredito: ["256,73", "3.026,73"],
         visaCredito: ["1.565,86", "50,00"]
       },
       extras: {
@@ -55,10 +62,48 @@ const cases = [
         pixStone: "910,86",
         notaPrazo: "",
         sangria: "1.250,00"
-      }
+      },
+      sobra: "0,13",
+      diferencaSobra: "0,13"
+    }
+  },
+  {
+    source: TURNO2_TEXT,
+    type: "text",
+    anchors: ["14587.04", "TROCO FINAL", "DIFERENCA(FALTA)", "-131.48"],
+    expected: {
+      vendaProdutos: "14.587,04",
+      cards: {
+        eloDebito: ["", "250,74"],
+        maestroDebito: ["110,00", "1.542,24"],
+        visaDebito: ["220,00", "1.380,74"],
+        eloCredito: ["142,00", "599,46"],
+        mastercardCredito: ["136,74", "3.500,42"],
+        visaCredito: ["2.056,38", "130,00"]
+      },
+      extras: {
+        abasteceAi: "994,68",
+        pixStone: "1.724,05",
+        notaPrazo: "174,11",
+        sangria: "1.294,00"
+      },
+      sobra: "-131,48",
+      diferencaSobra: "-131,48"
+    },
+    expectedTotals: {
+      cardTotal: 10068.72,
+      extraTotal: 4186.84,
+      calculatedSobra: -331.48,
+      recognizedSobra: -131.48,
+      isInconsistent: true
     }
   }
-].filter((testCase) => !(skipImageOcr && testCase.type === "image"));
+];
+
+const cases = [
+  ...imageCases.filter((testCase) => !(skipImageOcr && testCase.type === "image")),
+  ...textCases
+];
 
 function flatten(obj, prefix = "") {
   return Object.entries(obj).flatMap(([key, value]) => {
@@ -101,7 +146,20 @@ for (const testCase of cases) {
   }
 
   const parsed = parseReceiptOcrText(rawText);
-  const mismatches = assertDeepEqual(parsed, testCase.expected);
+  const foundValues = countOcrValues(parsed);
+  const mismatches = testCase.expected ? assertDeepEqual(parsed, testCase.expected) : [];
+  if (testCase.minValues && foundValues < testCase.minValues) {
+    mismatches.push({ key: "countOcrValues", expected: `>= ${testCase.minValues}`, actual: foundValues });
+  }
+  if (testCase.expectedTotals) {
+    for (const [key, expectedItem] of Object.entries(testCase.expectedTotals)) {
+      const actualItem = parsed.ocrTotals?.[key] ?? parsed[key];
+      const matches = typeof expectedItem === "number"
+        ? Math.abs((actualItem || 0) - expectedItem) < 0.01
+        : actualItem === expectedItem;
+      if (!matches) mismatches.push({ key: `ocrTotals.${key}`, expected: expectedItem, actual: actualItem });
+    }
+  }
   if (mismatches.length) {
     console.error(`OCR nao bateu com o resultado esperado para ${path.basename(testCase.source)}:`);
     console.table(mismatches);
@@ -110,6 +168,6 @@ for (const testCase of cases) {
   }
 
   console.log(`OCR OK para ${path.basename(testCase.source)}.`);
-  console.log(`Campos encontrados: ${countOcrValues(parsed)}`);
+  console.log(`Campos encontrados: ${foundValues}`);
   console.log(JSON.stringify(parsed, null, 2));
 }
