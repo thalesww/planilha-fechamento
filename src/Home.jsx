@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-export default function Home({ closing, updateClosing, history, onNew, onLoadHistory, calculateTotals, formatCurrency, formatDate, onImportClosingText }) {
+export default function Home({ closing, updateClosing, history, onNew, onLoadHistory, onOpenQrScanner, calculateTotals, formatCurrency, formatDate, onImportClosingText }) {
   const [closingText, setClosingText] = useState("");
 
   const handleImport = () => {
@@ -74,6 +74,13 @@ export default function Home({ closing, updateClosing, history, onNew, onLoadHis
               </select>
             </div>
           </div>
+          <button
+            type="button"
+            onClick={onOpenQrScanner}
+            className="mt-2 w-full bg-surface-container-high hover:bg-surface-variant text-primary font-bold rounded-lg py-4 flex items-center justify-center gap-2 transition-colors duration-200 min-h-[touch-target-min] border border-outline-variant">
+            <span className="material-symbols-outlined">qr_code_scanner</span>
+            Ler QR Code do fechamento
+          </button>
           <button 
             onClick={onNew}
             className="mt-4 w-full bg-primary hover:bg-primary-fixed-dim text-on-primary font-bold rounded-lg py-4 flex items-center justify-center gap-2 transition-colors duration-200 min-h-[touch-target-min]">

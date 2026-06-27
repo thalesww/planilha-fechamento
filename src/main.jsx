@@ -7,12 +7,15 @@ import {
   CheckCircle2,
   ClipboardCopy,
   FileDown,
+  QrCode,
   History,
   Plus,
   ReceiptText,
   RotateCcw,
+  ScanLine,
   Save,
   Trash2,
+  X,
   WalletCards
 } from "lucide-react";
 import {
@@ -34,6 +37,70 @@ const DB_NAME = "fechamento-caixa-db";
 const DB_VERSION = 1;
 const STORE = "closings";
 const DRAFT_KEY = "fechamento-caixa-draft-v1";
+
+
+const QR_PAYLOAD_VERSION = 1;
+
+function normalizeMoneyString(value) {
+  return formatNumber(parseMoney(value));
+}
+
+function compactClosingForQr(closing, totals = calculateTotals(closing)) {
+  return {
+    v: QR_PAYLOAD_VERSION,
+    cards: Object.fromEntries(CARD_FIELDS.map((field) => [
+      field.key,
+      field.sources.map((_, index) => normalizeMoneyString(closing.cards?.[field.key]?.[index]))
+    ])),
+    extras: Object.fromEntries(EXTRA_FIELDS.map((field) => [field.key, normalizeMoneyString(closing.extras?.[field.key])])),
+    optionalExtras: Object.fromEntries(
+      OPTIONAL_EXTRA_FIELDS.map((field) => [field.key, normalizeMoneyString(closing.optionalExtras?.[field.key])])
+    ),
+    vendaProdutos: normalizeMoneyString(closing.vendaProdutos),
+    sobra: normalizeMoneyString(totals.diferenca),
+    date: closing.date || "",
+    turno: closing.turno || "",
+    operador: closing.operador || ""
+  };
+}
+
+function encodeQrPayload(closing, totals) {
+  return JSON.stringify(compactClosingForQr(closing, totals));
+}
+
+function validateQrPayloadText(text) {
+  let parsed;
+  try {
+    parsed = JSON.parse(String(text || "").trim());
+  } catch {
+    throw new Error("Conteudo do QR Code nao e um JSON valido.");
+  }
+
+  const missing = ["cards", "extras", "optionalExtras", "vendaProdutos", "sobra", "date", "turno", "operador"].filter(
+    (key) => !(key in parsed)
+  );
+  if (missing.length) throw new Error(`Payload incompleto. Campos ausentes: ${missing.join(", ")}.`);
+
+  const blank = createBlankClosing();
+  return normalizeClosing({
+    ...blank,
+    cards: Object.fromEntries(CARD_FIELDS.map((field) => [
+      field.key,
+      field.sources.map((_, index) => parsed.cards?.[field.key]?.[index] || "")
+    ])),
+    extras: Object.fromEntries(EXTRA_FIELDS.map((field) => [field.key, parsed.extras?.[field.key] || ""])),
+    optionalExtras: Object.fromEntries(
+      OPTIONAL_EXTRA_FIELDS.map((field) => [field.key, parsed.optionalExtras?.[field.key] || ""])
+    ),
+    vendaProdutos: parsed.vendaProdutos || "",
+    date: parsed.date || blank.date,
+    turno: parsed.turno || blank.turno,
+    operador: parsed.operador || "",
+    step: STEPS.findIndex((step) => step.id === "resumo"),
+    status: "rascunho",
+    observations: "Importado por QR Code. Revise antes de salvar."
+  });
+}
 
 const STEPS = [
   { id: "notinha", label: "Cartões" },
@@ -483,6 +550,8 @@ function App() {
   const [history, setHistory] = useState([]);
   const [message, setMessage] = useState("");
   const [currentView, setCurrentView] = useState("home");
+  const [qrModalOpen, setQrModalOpen] = useState(false);
+  const [qrScannerOpen, setQrScannerOpen] = useState(false);
   // OCR state
   const [ocrStatus, setOcrStatus] = useState("idle"); // idle | running | done | error
   const [ocrProgress, setOcrProgress] = useState("");
@@ -494,6 +563,7 @@ function App() {
 
   const totals = useMemo(() => calculateTotals(closing), [closing]);
   const summary = useMemo(() => buildSummary(closing, totals), [closing, totals]);
+  const qrPayload = useMemo(() => encodeQrPayload(closing, totals), [closing, totals]);
   const currentStep = STEPS[closing.step];
 
   const lancamentos = useMemo(() => {
@@ -870,7 +940,6 @@ function App() {
     URL.revokeObjectURL(url);
   }, [closing, totals]);
 
-
   const importClosingText = useCallback((text) => {
     const parsed = parseClosingText(text);
     const foundValues = countOcrValues(parsed);
@@ -889,6 +958,21 @@ function App() {
     return true;
   }, []);
 
+  const applyQrPayload = useCallback((text) => {
+    try {
+      const importedClosing = validateQrPayloadText(text);
+      setClosing(importedClosing);
+      setCurrentView("form");
+      setQrScannerOpen(false);
+      setMessage("Fechamento importado por QR Code. Revise e edite antes de salvar.");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return true;
+    } catch (error) {
+      setMessage(error.message || "Nao foi possivel importar o QR Code.");
+      return false;
+    }
+  }, []);
+
   const resetForm = useCallback(() => {
     setClosing(createBlankClosing());
     setComprovantes(BLANK_COMPROVANTES);
@@ -903,6 +987,8 @@ function App() {
   return (
     <>
       {ocrStatus === "running" && <OcrLoadingOverlay progress={ocrProgress} />}
+      {qrModalOpen && <QrSendModal payload={qrPayload} onClose={() => setQrModalOpen(false)} />}
+      {qrScannerOpen && <QrScanModal onApply={applyQrPayload} onClose={() => setQrScannerOpen(false)} />}
       {currentView === "home" ? (
         <Home 
           closing={closing} 
@@ -910,6 +996,7 @@ function App() {
           history={history} 
           onNew={resetForm} 
           onLoadHistory={loadFromHistory}
+          onOpenQrScanner={() => setQrScannerOpen(true)}
           calculateTotals={calculateTotals}
           formatCurrency={formatCurrency}
           formatDate={formatDate}
@@ -1003,6 +1090,7 @@ function App() {
           onChangeOcrExtraValue={updateOcrExtraValue}
           onChangeOcrVendaProdutos={updateOcrVendaProdutos}
           onChangeOcrSobra={updateOcrSobra}
+          onOpenQrModal={() => setQrModalOpen(true)}
         />
       ) : null}
 
@@ -1072,7 +1160,8 @@ function NotinhaStep({
   onChangeOcrCardValue,
   onChangeOcrExtraValue,
   onChangeOcrVendaProdutos,
-  onChangeOcrSobra
+  onChangeOcrSobra,
+  onOpenQrModal
 }) {
   const activeField = CARD_FIELDS[closing.cardIndex];
 
@@ -1086,6 +1175,10 @@ function NotinhaStep({
           </div>
           <span className="beta-chip">Processamento Beta</span>
         </div>
+        <button className="qr-action" type="button" onClick={onOpenQrModal}>
+          <QrCode size={18} />
+          Enviar para celular
+        </button>
         <div className="capture-grid">
           <label className="attach-compact">
             <Camera size={18} />
@@ -1444,6 +1537,107 @@ function TotalCard({ label, value, compact = false }) {
     <div className={`total-card ${compact ? "compact" : ""}`}>
       <span>{label}</span>
       <strong>{formatCurrency(value)}</strong>
+    </div>
+  );
+}
+
+
+function QrSendModal({ payload, onClose }) {
+  const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=12&data=${encodeURIComponent(payload)}`;
+  const copyPayload = async () => navigator.clipboard.writeText(payload);
+
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Enviar para celular">
+      <section className="qr-modal">
+        <button className="modal-close" type="button" onClick={onClose} aria-label="Fechar">
+          <X size={18} />
+        </button>
+        <div className="section-heading">
+          <QrCode size={20} />
+          <div>
+            <h2>Enviar para celular</h2>
+            <span>Escaneie este QR Code no celular ou copie o conteúdo abaixo.</span>
+          </div>
+        </div>
+        <img className="qr-image" src={qrSrc} alt="QR Code com os valores do fechamento" />
+        <textarea readOnly value={payload} rows="5" />
+        <button className="primary-inline" type="button" onClick={copyPayload}>Copiar conteúdo codificado</button>
+      </section>
+    </div>
+  );
+}
+
+function QrScanModal({ onApply, onClose }) {
+  const videoRef = React.useRef(null);
+  const [manualText, setManualText] = useState("");
+  const [status, setStatus] = useState("Aguardando camera...");
+
+  useEffect(() => {
+    let stream;
+    let timer;
+    let stopped = false;
+
+    async function start() {
+      try {
+        if (!window.isSecureContext) {
+          throw new Error("Camera disponivel apenas em HTTPS ou localhost.");
+        }
+        if (!("BarcodeDetector" in window)) throw new Error("Leitor nativo indisponivel neste navegador.");
+        if (!navigator.mediaDevices?.getUserMedia) throw new Error("Camera indisponivel neste navegador.");
+        const detector = new window.BarcodeDetector({ formats: ["qr_code"] });
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        if (videoRef.current) videoRef.current.srcObject = stream;
+        setStatus("Aponte a camera para o QR Code do fechamento.");
+        const scan = async () => {
+          if (stopped || !videoRef.current) return;
+          try {
+            const codes = await detector.detect(videoRef.current);
+            const value = codes?.[0]?.rawValue;
+            if (value) {
+              const imported = onApply(value);
+              if (imported) {
+                stopped = true;
+                return;
+              }
+              setStatus("QR Code invalido para este fechamento. Aponte para o QR correto.");
+            }
+          } catch {}
+          timer = window.setTimeout(scan, 450);
+        };
+        timer = window.setTimeout(scan, 700);
+      } catch (error) {
+        setStatus(`${error.message || "Camera indisponivel."} Use o campo de colagem abaixo.`);
+      }
+    }
+
+    start();
+    return () => {
+      stopped = true;
+      if (timer) window.clearTimeout(timer);
+      stream?.getTracks().forEach((track) => track.stop());
+    };
+  }, [onApply]);
+
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Ler QR Code do fechamento">
+      <section className="qr-modal">
+        <button className="modal-close" type="button" onClick={onClose} aria-label="Fechar">
+          <X size={18} />
+        </button>
+        <div className="section-heading">
+          <ScanLine size={20} />
+          <div>
+            <h2>Ler QR Code do fechamento</h2>
+            <span>{status}</span>
+          </div>
+        </div>
+        <video className="qr-video" ref={videoRef} autoPlay muted playsInline />
+        <label className="notes-field">
+          <span>Fallback por texto</span>
+          <textarea value={manualText} rows="5" placeholder="Cole aqui o JSON copiado do computador" onChange={(event) => setManualText(event.target.value)} />
+        </label>
+        <button className="primary-inline" type="button" onClick={() => onApply(manualText)}>Importar conteúdo colado</button>
+      </section>
     </div>
   );
 }
