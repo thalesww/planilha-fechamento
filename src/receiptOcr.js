@@ -23,17 +23,19 @@ function parseMoney(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function formatOcrNumeric(value) {
+function formatOcrNumeric(value, { preserveSign = false } = {}) {
   if (!value) return "";
+  const isNegative = preserveSign && /-\s*\d/.test(String(value));
   const digits = String(value).replace(/\D/g, "");
   if (!digits) return "";
-  return formatNumber(Number(digits) / 100);
+  const amount = Number(digits) / 100;
+  return formatNumber(isNegative ? -amount : amount);
 }
 
-function extractAmountFromLine(line) {
-  const matches = line.match(/\d{1,3}(?:[.,]\d{3})*[.,]\d{2}|\d+[.,]\d{2}|\d{3,5}/g);
+function extractAmountFromLine(line, { preserveSign = false } = {}) {
+  const matches = line.match(/[+-]?\s*\d{1,3}(?:[.,]\d{3})*[.,]\d{2}|[+-]?\s*\d+[.,]\d{2}|[+-]?\s*\d{3,5}/g);
   if (!matches?.length) return "";
-  return formatOcrNumeric(matches[matches.length - 1]);
+  return formatOcrNumeric(matches[matches.length - 1], { preserveSign });
 }
 
 function isTefLine(line) {
@@ -120,7 +122,7 @@ export function parseReceiptOcrText(text) {
     .filter(Boolean);
 
   for (const line of lines) {
-    const value = extractAmountFromLine(line);
+    const value = extractAmountFromLine(line, { preserveSign: isSobraLine(line) });
     if (!value) continue;
 
     if (isSobraLine(line)) {
