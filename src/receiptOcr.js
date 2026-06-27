@@ -75,12 +75,18 @@ function setIfEmpty(result, section, key, indexOrValue, maybeValue) {
 }
 
 const CARD_LABEL_ALIASES = [
+  { key: "eloDebito", index: 1, patterns: [/\bTEF\b.*\bELO\b.*\bDEBITO\b/, /\bTEF\b.*\bDEBITO\b.*\bELO\b/] },
   { key: "eloDebito", index: 0, patterns: [/\bELO\b.*\bDEBITO\b/, /\bDEBITO\b.*\bELO\b/] },
+  { key: "maestroDebito", index: 1, patterns: [/\bTEF\b.*\bMAESTRO\b/, /\bTEF\b.*\bMASTER\s*DEBITO\b/] },
   { key: "maestroDebito", index: 0, patterns: [/\bMAESTRO\b/, /\bMASTER\s*DEBITO\b/] },
-  { key: "visaDebito", index: 0, patterns: [/\bVISA\b.*\bDEBITO\b/, /\bVISA\s*ELECTRON\b/] },
+  { key: "visaDebito", index: 1, patterns: [/\bTEF\b.*\bVISA\s*ELECTRON\b/, /\bTEF\b.*\bVISA\b.*\bDEBITO\b/] },
+  { key: "visaDebito", index: 0, patterns: [/\bVISA\s*ELECTRON\b/, /\bVISA\b.*\bDEBITO\b/] },
+  { key: "eloCredito", index: 1, patterns: [/\b2[O0]?\b.*\bVALOR\b.*\bELO\b.*\bCREDITO\b/, /\bTEF\b.*\bELO\b.*\bCREDITO\b/] },
   { key: "eloCredito", index: 0, patterns: [/\bELO\b.*\bCREDITO\b/, /\bCREDITO\b.*\bELO\b/] },
+  { key: "mastercardCredito", index: 1, patterns: [/\bTEF\b.*\bMASTERCARD\b/, /\bTEF\b.*\bMASTER\s*CARD\b/, /\bTEF\b.*\bMASTER\b.*\bCREDITO\b/] },
   { key: "mastercardCredito", index: 0, patterns: [/\bMASTERCARD\b/, /\bMASTER\s*CARD\b/, /\bMASTER\b.*\bCREDITO\b/] },
-  { key: "visaCredito", index: 0, patterns: [/\bVISA\b.*\bCREDITO\b/, /\bCREDITO\b.*\bVISA\b/] }
+  { key: "visaCredito", index: 0, patterns: [/\bTEF\b.*\bVISA\b/] },
+  { key: "visaCredito", index: 1, patterns: [/\bVISA\b.*\bCREDITO\b/, /\bCREDITO\b.*\bVISA\b/] }
 ];
 
 const EXTRA_LABEL_ALIASES = [
@@ -108,7 +114,22 @@ function normalizeLabel(label) {
 
 function extractComputerAmount(line) {
   const match = line.match(/(?:R\$\s*)?[-+]?\d{1,3}(?:\.\d{3})*,\d{2}|(?:R\$\s*)?[-+]?\d+[,.]\d{2}/i);
-  return match ? formatNumber(parseMoney(match[0])) : "";
+  return match ? formatNumber(parseComputerMoney(match[0])) : "";
+}
+
+function parseComputerMoney(value) {
+  if (!value) return 0;
+
+  const numeric = String(value).replace(/[^\d,.-]/g, "");
+  const decimalSeparatorIndex = Math.max(numeric.lastIndexOf(","), numeric.lastIndexOf("."));
+
+  if (decimalSeparatorIndex < 0) return parseMoney(numeric);
+
+  const integerPart = numeric.slice(0, decimalSeparatorIndex).replace(/[^\d-]/g, "");
+  const decimalPart = numeric.slice(decimalSeparatorIndex + 1).replace(/\D/g, "");
+  const parsed = Number.parseFloat(`${integerPart || "0"}.${decimalPart}`);
+
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function createEmptyClosingParseResult() {
@@ -146,7 +167,6 @@ export function parseClosingText(text) {
 
     const [rawLabel = line] = line.split(/[:;=]/);
     const label = normalizeLabel(rawLabel);
-    const tefIndex = /\bTEF\b/.test(label) ? 1 : 0;
 
     if (/\bVENDA\b.*\bPRODUT/.test(label) || /\bVENDA\b.*\bPOSTO\b/.test(label)) {
       result.vendaProdutos = value;
@@ -160,7 +180,7 @@ export function parseClosingText(text) {
 
     const cardAlias = CARD_LABEL_ALIASES.find((alias) => alias.patterns.some((pattern) => pattern.test(label)));
     if (cardAlias) {
-      result.cards[cardAlias.key][tefIndex || cardAlias.index] = value;
+      result.cards[cardAlias.key][cardAlias.index] = value;
       continue;
     }
 
