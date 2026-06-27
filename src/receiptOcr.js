@@ -137,6 +137,14 @@ export function countOcrValues(result) {
   return cardCount + extraCount + (result.vendaProdutos ? 1 : 0) + (result.sobra || result.diferencaSobra ? 1 : 0);
 }
 
+export function resetClosingSobra(closing) {
+  return {
+    ...closing,
+    sobra: "",
+    diferencaSobra: ""
+  };
+}
+
 export function applyOcrResultToClosing(currentClosing, ocrResult) {
   const next = structuredClone(currentClosing);
 

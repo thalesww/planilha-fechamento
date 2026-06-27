@@ -15,7 +15,7 @@ import {
   Trash2,
   WalletCards
 } from "lucide-react";
-import { applyOcrResultToClosing, countOcrValues, parseReceiptOcrText } from "./receiptOcr.js";
+import { applyOcrResultToClosing, countOcrValues, parseReceiptOcrText, resetClosingSobra } from "./receiptOcr.js";
 import Home from "./Home.jsx";
 import Resumo from "./Resumo.jsx";
 import Comprovantes from "./Comprovantes.jsx";
@@ -533,7 +533,14 @@ function App() {
   }, [closing]);
 
   const updateClosing = useCallback((patch) => {
-    setClosing((current) => ({ ...current, ...patch, updatedAt: new Date().toISOString() }));
+    setClosing((current) => {
+      const shouldClearSobra = Object.prototype.hasOwnProperty.call(patch, "vendaProdutos");
+      const next = shouldClearSobra ? resetClosingSobra({ ...current, ...patch }) : { ...current, ...patch };
+      return {
+        ...next,
+        updatedAt: new Date().toISOString()
+      };
+    });
   }, []);
 
   const goToStep = useCallback((step) => {
@@ -584,7 +591,7 @@ function App() {
       const nextValues = [...current.cards[fieldKey]];
       nextValues[index] = toMoneyInput(value);
       return {
-        ...current,
+        ...resetClosingSobra(current),
         cards: { ...current.cards, [fieldKey]: nextValues },
         updatedAt: new Date().toISOString()
       };
@@ -593,7 +600,7 @@ function App() {
 
   const updateExtraValue = useCallback((fieldKey, value) => {
     setClosing((current) => ({
-      ...current,
+      ...resetClosingSobra(current),
       extras: { ...current.extras, [fieldKey]: toMoneyInput(value) },
       updatedAt: new Date().toISOString()
     }));
@@ -601,7 +608,7 @@ function App() {
 
   const updateOptionalExtraValue = useCallback((fieldKey, value) => {
     setClosing((current) => ({
-      ...current,
+      ...resetClosingSobra(current),
       optionalExtras: { ...current.optionalExtras, [fieldKey]: toMoneyInput(value) },
       updatedAt: new Date().toISOString()
     }));
@@ -626,7 +633,7 @@ function App() {
 
   const fillExample = useCallback(() => {
     setClosing((current) => ({
-      ...current,
+      ...resetClosingSobra(current),
       cards: SAMPLE_VALUES.cards,
       extras: SAMPLE_VALUES.extras,
       vendaProdutos: SAMPLE_VALUES.vendaProdutos,
@@ -975,7 +982,7 @@ function App() {
       ) : null}
 
       {currentStep.id === "venda" ? (
-        <VendaStep
+      <VendaStep
           closing={closing}
           totals={totals}
           onVenda={(value) => updateClosing({ vendaProdutos: toMoneyInput(value) })}
