@@ -21,6 +21,7 @@ import {
   countOcrValues,
   parseClosingText,
   parseReceiptOcrText,
+  resetClosingSobra,
   validateOcrResult
 } from "./receiptOcr.js";
 import Home from "./Home.jsx";
@@ -181,6 +182,7 @@ function createBlankClosing() {
     optionalExtras: Object.fromEntries(OPTIONAL_EXTRA_FIELDS.map((field) => [field.key, ""])),
     vendaProdutos: "",
     sobra: "",
+    diferencaSobra: "",
     observations: "",
     attachments: [],
     status: "rascunho",
@@ -207,6 +209,7 @@ function normalizeClosing(raw) {
     extras: { ...blank.extras, ...(raw?.extras || {}) },
     optionalExtras: { ...blank.optionalExtras, ...(raw?.optionalExtras || {}) },
     sobra: raw?.sobra || blank.sobra,
+    diferencaSobra: raw?.diferencaSobra || blank.diferencaSobra,
     attachments: Array.isArray(raw?.attachments) ? raw.attachments : [],
     step: Number.isInteger(raw?.step) ? Math.min(Math.max(raw.step, 0), STEPS.length - 1) : 0,
     cardIndex: Number.isInteger(raw?.cardIndex) ? Math.min(Math.max(raw.cardIndex, 0), CARD_FIELDS.length - 1) : 0,
@@ -420,6 +423,7 @@ function calculateTotals(closing) {
   const optionalExtrasTotal = OPTIONAL_EXTRA_FIELDS.reduce((sum, field) => sum + getOptionalExtraTotal(closing, field.key), 0);
   const venda = parseMoney(closing.vendaProdutos);
   const entradas = cardTotal + extrasTotal + optionalExtrasTotal;
+  const sobra = parseMoney(closing.sobra || closing.diferencaSobra);
 
   return {
     cardTotal,
@@ -427,7 +431,7 @@ function calculateTotals(closing) {
     optionalExtrasTotal,
     entradas,
     venda,
-    diferenca: entradas - venda
+    diferenca: closing.sobra || closing.diferencaSobra ? sobra : entradas - venda
   };
 }
 
@@ -481,7 +485,7 @@ function App() {
   const [ocrProgress, setOcrProgress] = useState("");
   const [ocrResult, setOcrResult] = useState(null); // raw parsed result before confirmation
   const [ocrFoundCount, setOcrFoundCount] = useState(0);
-  const TOTAL_OCR_FIELDS = 13; // 6 card pairs * 2 + 4 extras
+  const TOTAL_OCR_FIELDS = 18; // venda + 6 card pairs * 2 + 4 extras + sobra
   // Comprovantes state
   const [comprovantes, setComprovantes] = useState(BLANK_COMPROVANTES);
 
@@ -539,7 +543,14 @@ function App() {
   }, [closing]);
 
   const updateClosing = useCallback((patch) => {
-    setClosing((current) => ({ ...current, ...patch, updatedAt: new Date().toISOString() }));
+    setClosing((current) => {
+      const shouldClearSobra = Object.prototype.hasOwnProperty.call(patch, "vendaProdutos");
+      const next = shouldClearSobra ? resetClosingSobra({ ...current, ...patch }) : { ...current, ...patch };
+      return {
+        ...next,
+        updatedAt: new Date().toISOString()
+      };
+    });
   }, []);
 
   const goToStep = useCallback((step) => {
@@ -590,7 +601,7 @@ function App() {
       const nextValues = [...current.cards[fieldKey]];
       nextValues[index] = toMoneyInput(value);
       return {
-        ...current,
+        ...resetClosingSobra(current),
         cards: { ...current.cards, [fieldKey]: nextValues },
         updatedAt: new Date().toISOString()
       };
@@ -599,7 +610,7 @@ function App() {
 
   const updateExtraValue = useCallback((fieldKey, value) => {
     setClosing((current) => ({
-      ...current,
+      ...resetClosingSobra(current),
       extras: { ...current.extras, [fieldKey]: toMoneyInput(value) },
       updatedAt: new Date().toISOString()
     }));
@@ -607,7 +618,7 @@ function App() {
 
   const updateOptionalExtraValue = useCallback((fieldKey, value) => {
     setClosing((current) => ({
-      ...current,
+      ...resetClosingSobra(current),
       optionalExtras: { ...current.optionalExtras, [fieldKey]: toMoneyInput(value) },
       updatedAt: new Date().toISOString()
     }));
@@ -632,7 +643,7 @@ function App() {
 
   const fillExample = useCallback(() => {
     setClosing((current) => ({
-      ...current,
+      ...resetClosingSobra(current),
       cards: SAMPLE_VALUES.cards,
       extras: SAMPLE_VALUES.extras,
       vendaProdutos: SAMPLE_VALUES.vendaProdutos,
@@ -742,6 +753,36 @@ function App() {
       attachments: [...current.attachments, ...encoded],
       updatedAt: new Date().toISOString()
     }));
+  }, []);
+
+
+  const updateOcrCardValue = useCallback((fieldKey, index, value) => {
+    setOcrResult((current) => {
+      if (!current) return current;
+      const currentValues = current.cards?.[fieldKey] || ["", ""];
+      const nextValues = [...currentValues];
+      nextValues[index] = toMoneyInput(value);
+      return {
+        ...current,
+        cards: { ...current.cards, [fieldKey]: nextValues }
+      };
+    });
+  }, []);
+
+  const updateOcrExtraValue = useCallback((fieldKey, value) => {
+    setOcrResult((current) => current ? {
+      ...current,
+      extras: { ...current.extras, [fieldKey]: toMoneyInput(value) }
+    } : current);
+  }, []);
+
+  const updateOcrVendaProdutos = useCallback((value) => {
+    setOcrResult((current) => current ? { ...current, vendaProdutos: toMoneyInput(value) } : current);
+  }, []);
+
+  const updateOcrSobra = useCallback((value) => {
+    const formatted = toMoneyInput(value);
+    setOcrResult((current) => current ? { ...current, sobra: formatted, diferencaSobra: formatted } : current);
   }, []);
 
   const confirmOcr = useCallback(() => {
@@ -952,6 +993,10 @@ function App() {
           TOTAL_OCR_FIELDS={TOTAL_OCR_FIELDS}
           onConfirmOcr={confirmOcr}
           onDiscardOcr={discardOcr}
+          onChangeOcrCardValue={updateOcrCardValue}
+          onChangeOcrExtraValue={updateOcrExtraValue}
+          onChangeOcrVendaProdutos={updateOcrVendaProdutos}
+          onChangeOcrSobra={updateOcrSobra}
         />
       ) : null}
 
@@ -965,7 +1010,7 @@ function App() {
       ) : null}
 
       {currentStep.id === "venda" ? (
-        <VendaStep
+      <VendaStep
           closing={closing}
           totals={totals}
           onVenda={(value) => updateClosing({ vendaProdutos: toMoneyInput(value) })}
@@ -1016,7 +1061,11 @@ function NotinhaStep({
   ocrFoundCount,
   TOTAL_OCR_FIELDS,
   onConfirmOcr,
-  onDiscardOcr
+  onDiscardOcr,
+  onChangeOcrCardValue,
+  onChangeOcrExtraValue,
+  onChangeOcrVendaProdutos,
+  onChangeOcrSobra
 }) {
   const activeField = CARD_FIELDS[closing.cardIndex];
 
@@ -1082,6 +1131,10 @@ function NotinhaStep({
               totalFields={TOTAL_OCR_FIELDS}
               onConfirm={onConfirmOcr}
               onDiscard={onDiscardOcr}
+              onChangeCardValue={onChangeOcrCardValue}
+              onChangeExtraValue={onChangeOcrExtraValue}
+              onChangeVendaProdutos={onChangeOcrVendaProdutos}
+              onChangeSobra={onChangeOcrSobra}
             />
           </div>
         )}

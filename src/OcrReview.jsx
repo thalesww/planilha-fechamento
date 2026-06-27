@@ -63,7 +63,17 @@ export function OcrLoadingOverlay({ progress }) {
 }
 
 // ── Result panel ───────────────────────────────────────────────────────────────
-export function OcrReviewPanel({ ocrResult, foundCount, totalFields, onConfirm, onDiscard }) {
+export function OcrReviewPanel({
+  ocrResult,
+  foundCount,
+  totalFields,
+  onConfirm,
+  onDiscard,
+  onChangeCardValue,
+  onChangeExtraValue,
+  onChangeVendaProdutos,
+  onChangeSobra
+}) {
   const precision = Math.round((foundCount / totalFields) * 100);
   const precisionColor =
     precision >= 80 ? 'precision-high' : precision >= 50 ? 'precision-mid' : 'precision-low';
@@ -76,15 +86,13 @@ export function OcrReviewPanel({ ocrResult, foundCount, totalFields, onConfirm, 
       const v1 = parseMoney(vals[1]);
       const hasAny = v0 > 0 || v1 > 0;
       return { ...field, vals, v0, v1, sum: v0 + v1, hasAny };
-    })
-    .filter(r => r.hasAny);
+    });
 
   const extraRows = EXTRA_REVIEW_FIELDS
     .map(field => {
       const val = parseMoney(ocrResult?.extras?.[field.key]);
       return { ...field, val };
-    })
-    .filter(r => r.val > 0);
+    });
 
   return (
     <div className="ocr-review-panel">
@@ -114,13 +122,33 @@ export function OcrReviewPanel({ ocrResult, foundCount, totalFields, onConfirm, 
         </div>
       )}
 
-      {foundCount === 0 ? (
+      {foundCount === 0 && (
         <div className="ocr-review-empty">
           <AlertTriangle size={28} />
           <p>Nenhum valor reconhecido. Verifique a nitidez da foto e tente novamente, ou preencha manualmente.</p>
         </div>
-      ) : (
-        <div className="ocr-review-list">
+      )}
+
+      <div className="ocr-review-list">
+
+          {/* Venda Produtos */}
+          <div className="ocr-review-item">
+            <div className="ocr-review-item-label">Venda de produtos</div>
+            <div className="ocr-review-sources">
+              <div className="ocr-review-source-row">
+                <span className="ocr-source-name">Reconhecido</span>
+                <input
+                  className="ocr-source-value ocr-source-input"
+                  type="text"
+                  inputMode="numeric"
+                  value={ocrResult?.vendaProdutos || ''}
+                  placeholder="0,00"
+                  onChange={(event) => onChangeVendaProdutos?.(event.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+
           {/* Card fields */}
           {cardRows.map(row => (
             <div key={row.key} className="ocr-review-item">
@@ -129,7 +157,14 @@ export function OcrReviewPanel({ ocrResult, foundCount, totalFields, onConfirm, 
                 {row.vals.map((v, i) => (
                   <div key={i} className="ocr-review-source-row">
                     <span className="ocr-source-name">{row.sources[i]}</span>
-                    <span className="ocr-source-value">{v ? formatCurrency(parseMoney(v)) : '—'}</span>
+                    <input
+                      className="ocr-source-value ocr-source-input"
+                      type="text"
+                      inputMode="numeric"
+                      value={v || ''}
+                      placeholder="0,00"
+                      onChange={(event) => onChangeCardValue?.(row.key, i, event.target.value)}
+                    />
                   </div>
                 ))}
                 {row.v0 > 0 && row.v1 > 0 && (
@@ -149,13 +184,38 @@ export function OcrReviewPanel({ ocrResult, foundCount, totalFields, onConfirm, 
               <div className="ocr-review-sources">
                 <div className="ocr-review-source-row">
                   <span className="ocr-source-name">Reconhecido</span>
-                  <span className="ocr-source-value">{formatCurrency(row.val)}</span>
+                  <input
+                    className="ocr-source-value ocr-source-input"
+                    type="text"
+                    inputMode="numeric"
+                    value={ocrResult?.extras?.[row.key] || ''}
+                    placeholder="0,00"
+                    onChange={(event) => onChangeExtraValue?.(row.key, event.target.value)}
+                  />
                 </div>
               </div>
             </div>
           ))}
-        </div>
-      )}
+
+
+          {/* Sobra / diferenca */}
+          <div className="ocr-review-item">
+            <div className="ocr-review-item-label">Sobra / diferença</div>
+            <div className="ocr-review-sources">
+              <div className="ocr-review-source-row">
+                <span className="ocr-source-name">Reconhecido</span>
+                <input
+                  className="ocr-source-value ocr-source-input"
+                  type="text"
+                  inputMode="numeric"
+                  value={ocrResult?.sobra || ocrResult?.diferencaSobra || ''}
+                  placeholder="0,00"
+                  onChange={(event) => onChangeSobra?.(event.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+      </div>
 
       {/* Actions */}
       <div className="ocr-review-actions">

@@ -62,7 +62,8 @@ export function createEmptyOcrResult() {
       sangria: ""
     },
     optionalExtras: {},
-    sobra: ""
+    sobra: "",
+    diferencaSobra: ""
   };
 }
 
@@ -213,8 +214,11 @@ export function parseReceiptOcrText(text) {
 
     if (line.includes("VENDA") && line.includes("PRODUT")) {
       if (!result.vendaProdutos) result.vendaProdutos = value;
-    } else if (line.includes("SOBRA")) {
-      if (!result.sobra) result.sobra = value;
+    } else if (line.includes("SOBRA") || (line.includes("DIFER") && line.includes("SOBRA"))) {
+      if (!result.sobra) {
+        result.sobra = value;
+        result.diferencaSobra = value;
+      }
     } else if (line.includes("ABASTECE") || line.includes("RIE CARTAY")) {
       setIfEmpty(result, "extras", "abasteceAi", value);
     } else if (line.includes("QRL") || line.includes("PIX") || line.includes("RLINX")) {
@@ -257,7 +261,15 @@ export function countOcrValues(result) {
   const cardCount = Object.values(result.cards).flat().filter(Boolean).length;
   const extraCount = Object.values(result.extras || {}).filter(Boolean).length;
   const optionalExtraCount = Object.values(result.optionalExtras || {}).filter(Boolean).length;
-  return cardCount + extraCount + optionalExtraCount + (result.vendaProdutos ? 1 : 0) + (result.sobra ? 1 : 0);
+  return cardCount + extraCount + optionalExtraCount + (result.vendaProdutos ? 1 : 0) + (result.sobra || result.diferencaSobra ? 1 : 0);
+}
+
+export function resetClosingSobra(closing) {
+  return {
+    ...closing,
+    sobra: "",
+    diferencaSobra: ""
+  };
 }
 
 export function validateOcrResult(parsed) {
@@ -301,24 +313,29 @@ export function compareOcrAttempts(current, candidate) {
 export function applyOcrResultToClosing(currentClosing, ocrResult, { overwrite = false } = {}) {
   const next = structuredClone(currentClosing);
 
-  if (ocrResult.vendaProdutos && (overwrite || !next.vendaProdutos)) next.vendaProdutos = ocrResult.vendaProdutos;
+  if (overwrite || ocrResult.vendaProdutos) next.vendaProdutos = ocrResult.vendaProdutos || "";
 
-  for (const [key, values] of Object.entries(ocrResult.cards)) {
+  for (const [key, values] of Object.entries(ocrResult.cards || {})) {
     values.forEach((value, index) => {
-      if (value && (overwrite || !next.cards[key][index])) next.cards[key][index] = value;
+      if (!next.cards[key]) return;
+      if (overwrite || value) next.cards[key][index] = value || "";
     });
   }
 
   for (const [key, value] of Object.entries(ocrResult.extras || {})) {
-    if (value && (overwrite || !next.extras[key])) next.extras[key] = value;
+    if (overwrite || value) next.extras[key] = value || "";
   }
 
   next.optionalExtras = next.optionalExtras || {};
   for (const [key, value] of Object.entries(ocrResult.optionalExtras || {})) {
-    if (value && (overwrite || !next.optionalExtras[key])) next.optionalExtras[key] = value;
+    if (overwrite || value) next.optionalExtras[key] = value || "";
   }
 
-  if (ocrResult.sobra && (overwrite || !next.sobra)) next.sobra = ocrResult.sobra;
+  const sobra = ocrResult.sobra || ocrResult.diferencaSobra || "";
+  if (overwrite || sobra) {
+    next.sobra = sobra;
+    next.diferencaSobra = sobra;
+  }
 
   return next;
 }
