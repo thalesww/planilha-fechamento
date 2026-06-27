@@ -473,6 +473,7 @@ function App() {
   const [ocrProgress, setOcrProgress] = useState("");
   const [ocrResult, setOcrResult] = useState(null); // raw parsed result before confirmation
   const [ocrFoundCount, setOcrFoundCount] = useState(0);
+  const [ocrAttachmentId, setOcrAttachmentId] = useState("");
   const TOTAL_OCR_FIELDS = 13; // 6 card pairs * 2 + 4 extras
   // Comprovantes state
   const [comprovantes, setComprovantes] = useState(BLANK_COMPROVANTES);
@@ -480,7 +481,7 @@ function App() {
   const totals = useMemo(() => calculateTotals(closing), [closing]);
   const summary = useMemo(() => buildSummary(closing, totals), [closing, totals]);
   const currentStep = STEPS[closing.step];
-  const latestAttachment = closing.attachments.at(-1) || null;
+  const ocrAttachment = closing.attachments.find((attachment) => attachment.id === ocrAttachmentId) || null;
 
   const lancamentos = useMemo(() => {
     if (currentStep.id !== "resumo") return [];
@@ -678,6 +679,7 @@ function App() {
     setOcrStatus("running");
     setOcrProgress("Carregando motor OCR…");
     setOcrResult(null);
+    setOcrAttachmentId(encoded[0]?.id || "");
 
     try {
       const tesseractModule = await import("tesseract.js");
@@ -776,6 +778,7 @@ function App() {
       ...current,
       attachments: current.attachments.filter((attachment) => attachment.id !== id)
     }));
+    setOcrAttachmentId((current) => (current === id ? "" : current));
     setPreviewAttachment((current) => (current?.id === id ? null : current));
   }, []);
 
@@ -943,7 +946,7 @@ function App() {
           onConfirmOcr={confirmOcr}
           onDiscardOcr={discardOcr}
           onPreviewAttachment={setPreviewAttachment}
-          latestAttachment={latestAttachment}
+          ocrAttachment={ocrAttachment}
         />
       ) : null}
 
@@ -1033,7 +1036,7 @@ function NotinhaStep({
   onConfirmOcr,
   onDiscardOcr,
   onPreviewAttachment,
-  latestAttachment
+  ocrAttachment
 }) {
   const activeField = CARD_FIELDS[closing.cardIndex];
 
@@ -1100,8 +1103,8 @@ function NotinhaStep({
 
         {ocrStatus === "done" && ocrResult && (
           <div className="ocr-review-wrapper">
-            {latestAttachment ? (
-              <button type="button" className="open-note-button" onClick={() => onPreviewAttachment(latestAttachment)}>
+            {ocrAttachment ? (
+              <button type="button" className="open-note-button" onClick={() => onPreviewAttachment(ocrAttachment)}>
                 Abrir imagem da nota
               </button>
             ) : null}
