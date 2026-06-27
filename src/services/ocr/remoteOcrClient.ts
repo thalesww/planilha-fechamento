@@ -11,6 +11,13 @@ function envValue(key: string): string {
   return String((import.meta as any).env?.[key] || "").trim();
 }
 
+function buildReceiptOcrUrl(apiUrl: string): string {
+  const normalized = apiUrl.replace(/\/+$/, "");
+  return normalized.endsWith("/api")
+    ? `${normalized}/ocr/receipt`
+    : `${normalized}/api/ocr/receipt`;
+}
+
 export async function recognizeReceiptRemote(
   image: File | Blob,
   options: RemoteOcrClientOptions = {},
@@ -30,7 +37,7 @@ export async function recognizeReceiptRemote(
     const form = new FormData();
     form.append("file", image, image instanceof File ? image.name : "receipt.jpg");
 
-    const response = await fetch(`${apiUrl}/api/ocr/receipt`, {
+    const response = await fetch(buildReceiptOcrUrl(apiUrl), {
       method: "POST",
       headers: {
         "x-ocr-api-key": apiKey,
