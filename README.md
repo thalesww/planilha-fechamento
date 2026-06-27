@@ -15,6 +15,8 @@ No celular, acesse o IP local do computador na mesma rede Wi-Fi:
 http://192.168.18.2:5174/
 ```
 
+Em `http://<IP-da-rede>:5174`, navegadores de celular bloqueiam o acesso a camera por nao ser uma origem segura. Nesse modo, use o fallback de texto do modal de QR Code. Para usar a camera do leitor QR, abra o app em `localhost` no proprio aparelho ou sirva o PWA por HTTPS.
+
 ## Testes
 
 Build de producao:

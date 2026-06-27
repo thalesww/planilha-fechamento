@@ -895,8 +895,10 @@ function App() {
       setQrScannerOpen(false);
       setMessage("Fechamento importado por QR Code. Revise e edite antes de salvar.");
       window.scrollTo({ top: 0, behavior: "smooth" });
+      return true;
     } catch (error) {
       setMessage(error.message || "Nao foi possivel importar o QR Code.");
+      return false;
     }
   }, []);
 
@@ -1475,7 +1477,11 @@ function QrScanModal({ onApply, onClose }) {
 
     async function start() {
       try {
+        if (!window.isSecureContext) {
+          throw new Error("Camera disponivel apenas em HTTPS ou localhost.");
+        }
         if (!("BarcodeDetector" in window)) throw new Error("Leitor nativo indisponivel neste navegador.");
+        if (!navigator.mediaDevices?.getUserMedia) throw new Error("Camera indisponivel neste navegador.");
         const detector = new window.BarcodeDetector({ formats: ["qr_code"] });
         stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
         if (videoRef.current) videoRef.current.srcObject = stream;
@@ -1486,9 +1492,12 @@ function QrScanModal({ onApply, onClose }) {
             const codes = await detector.detect(videoRef.current);
             const value = codes?.[0]?.rawValue;
             if (value) {
-              stopped = true;
-              onApply(value);
-              return;
+              const imported = onApply(value);
+              if (imported) {
+                stopped = true;
+                return;
+              }
+              setStatus("QR Code invalido para este fechamento. Aponte para o QR correto.");
             }
           } catch {}
           timer = window.setTimeout(scan, 450);
