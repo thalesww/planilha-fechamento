@@ -183,6 +183,7 @@ function createBlankClosing() {
 
 function normalizeClosing(raw) {
   const blank = createBlankClosing();
+  const { sobraInformada, ...rawWithoutLegacySobra } = raw || {};
   const cards = Object.fromEntries(
     CARD_FIELDS.map((field) => {
       const previous = raw?.cards?.[field.key];
@@ -195,11 +196,11 @@ function normalizeClosing(raw) {
 
   return {
     ...blank,
-    ...raw,
+    ...rawWithoutLegacySobra,
     cards,
     extras: { ...blank.extras, ...(raw?.extras || {}) },
     optionalExtras: { ...blank.optionalExtras, ...(raw?.optionalExtras || {}) },
-    sobra: raw?.sobraInformada ?? raw?.sobra ?? blank.sobra,
+    sobra: raw?.sobra ?? sobraInformada ?? blank.sobra,
     attachments: Array.isArray(raw?.attachments) ? raw.attachments : [],
     step: Number.isInteger(raw?.step) ? Math.min(Math.max(raw.step, 0), STEPS.length - 1) : 0,
     cardIndex: Number.isInteger(raw?.cardIndex) ? Math.min(Math.max(raw.cardIndex, 0), CARD_FIELDS.length - 1) : 0,
