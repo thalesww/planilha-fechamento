@@ -8,6 +8,7 @@
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
     "test:closing-text": "node scripts/test-closing-text-parser.mjs",
+    "test:receipt-pipeline": "node scripts/test-receipt-ocr-pipeline.mjs",
     "test:ocr-validation": "node scripts/test-ocr-validation.mjs",
     "test:ocr-sobra-sign": "node scripts/test-ocr-sobra-sign.mjs",
     "test:ocr": "node scripts/test-ocr-image.mjs"

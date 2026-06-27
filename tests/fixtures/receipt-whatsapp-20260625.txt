@@ -1,0 +1,37 @@
+POSTO VILA FLORESTA LTDA
+CNPJ 45.382.951/0001-00 IE: 0042758310023
+RUA RAUL MENDES, 151 - BELO HORIZONTE/MG
+Relatorio emitido em: 24/06/2026 14:04h
+
+INFORMACOES DO CAIXA
+Conta.....: VILA FLORESTA - PDV 01
+Data......: 24/06/2026 Turno: 1
+Operador..: MARCUS VINICIUS DO N CAMARGO
+Abertura..: 24/06/2026 05:41
+Fechamento: 24/06/2026 14:04
+
+ENTRADAS
+VENDA DE PRODUTOS                          8112.39
+Total....................................  8112.39
+
+SAIDAS
+ABASTECE AI CARTAO                          473.39
+MAESTRO                                     109.10
+
+MASTERCARD                                  220.00
+NOTA A PRAZO                                220.00
+QRLINX - PIX SMART                          602.42
+SANGRIA DINHEIRO                            864.00
+TEF - ELO CREDITO                           311.76
+TEF - ELO DEBITO                            160.00
+TEF - MAESTRO                              1859.19
+TEF - MASTERCARD                           1122.11
+TEF - VISA                                  687.84
+TEF - VISA ELECTRON                        1174.70
+VISA CREDITO                                265.31
+VISA ELECTRON                                40.00
+
+Formas de pagamento......................  7245.82
+Outras saidas............................   864.00
+Total....................................  8109.82
+Diferenca(Falta).........................    -2.57
