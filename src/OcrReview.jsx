@@ -1,6 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import { CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
 
+const MONEY_INPUT_PROPS = {
+  type: 'text',
+  inputMode: 'decimal',
+  enterKeyHint: 'next',
+  autoComplete: 'off',
+  autoCorrect: 'off',
+  spellCheck: false,
+  'data-lpignore': 'true',
+  'data-1p-ignore': 'true',
+};
+
 function parseMoney(value) {
   if (!value) return 0;
   const normalized = String(value)
@@ -222,9 +233,9 @@ export function OcrReviewPanel({
               <div className="ocr-review-source-row">
                 <span className="ocr-source-name">Reconhecido</span>
                 <input
+                  {...MONEY_INPUT_PROPS}
                   className="ocr-source-value ocr-source-input"
-                  type="text"
-                  inputMode="numeric"
+                  name="ocr-venda-produtos"
                   value={ocrResult?.vendaProdutos || ''}
                   placeholder="0,00"
                   onChange={(event) => onChangeVendaProdutos?.(event.target.value)}
@@ -243,9 +254,9 @@ export function OcrReviewPanel({
                   <div key={i} className="ocr-review-source-row">
                     <span className="ocr-source-name">{row.sources[i]}</span>
                     <input
+                      {...MONEY_INPUT_PROPS}
                       className="ocr-source-value ocr-source-input"
-                      type="text"
-                      inputMode="numeric"
+                      name={`ocr-card-${row.key}-${i}`}
                       value={v || ''}
                       placeholder="0,00"
                       onChange={(event) => onChangeCardValue?.(row.key, i, event.target.value)}
@@ -271,9 +282,9 @@ export function OcrReviewPanel({
                 <div className="ocr-review-source-row">
                   <span className="ocr-source-name">Reconhecido</span>
                   <input
+                    {...MONEY_INPUT_PROPS}
                     className="ocr-source-value ocr-source-input"
-                    type="text"
-                    inputMode="numeric"
+                    name={`ocr-extra-${row.key}`}
                     value={ocrResult?.extras?.[row.key] || ''}
                     placeholder="0,00"
                     onChange={(event) => onChangeExtraValue?.(row.key, event.target.value)}
@@ -291,9 +302,9 @@ export function OcrReviewPanel({
               <div className="ocr-review-source-row">
                 <span className="ocr-source-name">Reconhecido</span>
                 <input
+                  {...MONEY_INPUT_PROPS}
                   className="ocr-source-value ocr-source-input"
-                  type="text"
-                  inputMode="numeric"
+                  name="ocr-sobra"
                   value={ocrResult?.sobra || ocrResult?.diferencaSobra || ''}
                   placeholder="0,00"
                   onChange={(event) => onChangeSobra?.(event.target.value)}

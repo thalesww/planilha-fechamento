@@ -67,7 +67,7 @@ button:disabled {
   width: min(100%, 720px);
   min-height: 100dvh;
   margin: 0 auto;
-  padding: 0 16px calc(156px + env(safe-area-inset-bottom));
+  padding: 0 16px calc(156px + env(safe-area-inset-bottom) + var(--keyboard-offset, 0px));
 }
 
 .top-app-bar {
@@ -935,7 +935,7 @@ h3 {
 .bottom-nav {
   position: fixed;
   right: 0;
-  bottom: 0;
+  bottom: var(--keyboard-offset, 0px);
   left: 0;
   z-index: 30;
   display: grid;

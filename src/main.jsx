@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   ArrowLeft,
@@ -630,6 +630,34 @@ function App() {
   const qrPayload = useMemo(() => encodeQrPayload(closing, totals), [closing, totals]);
   const currentStep = STEPS[closing.step];
   const ocrAttachment = closing.attachments.find((attachment) => attachment.id === ocrAttachmentId) || null;
+  const pendingMoneyFocusRef = useRef("");
+
+  const focusMoneyField = useCallback((focusKey) => {
+    if (!focusKey) return;
+
+    const focus = () => {
+      const input = document.querySelector(`[data-money-focus="${focusKey}"]`);
+      if (!(input instanceof HTMLInputElement)) return false;
+
+      input.scrollIntoView({ block: "center", behavior: "smooth" });
+      input.focus({ preventScroll: true });
+      input.select();
+      return true;
+    };
+
+    if (focus()) return;
+    window.requestAnimationFrame(() => {
+      if (focus()) return;
+      window.setTimeout(focus, 80);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!pendingMoneyFocusRef.current) return;
+    const focusKey = pendingMoneyFocusRef.current;
+    pendingMoneyFocusRef.current = "";
+    focusMoneyField(focusKey);
+  }, [closing.cardIndex, closing.extraIndex, closing.step, currentStep.id, focusMoneyField]);
 
   const lancamentos = useMemo(() => {
     if (currentStep.id !== "resumo") return [];
@@ -658,6 +686,28 @@ function App() {
   useEffect(() => {
     refreshHistory();
   }, [refreshHistory]);
+
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return undefined;
+
+    const updateKeyboardOffset = () => {
+      const offset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
+      document.documentElement.style.setProperty("--keyboard-offset", `${Math.round(offset)}px`);
+    };
+
+    updateKeyboardOffset();
+    viewport.addEventListener("resize", updateKeyboardOffset);
+    viewport.addEventListener("scroll", updateKeyboardOffset);
+    window.addEventListener("orientationchange", updateKeyboardOffset);
+
+    return () => {
+      viewport.removeEventListener("resize", updateKeyboardOffset);
+      viewport.removeEventListener("scroll", updateKeyboardOffset);
+      window.removeEventListener("orientationchange", updateKeyboardOffset);
+      document.documentElement.style.removeProperty("--keyboard-offset");
+    };
+  }, []);
 
   useEffect(() => {
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
@@ -709,30 +759,42 @@ function App() {
 
   const nextStep = useCallback(() => {
     if (currentStep.id === "notinha" && closing.cardIndex < CARD_FIELDS.length - 1) {
+      const nextField = CARD_FIELDS[closing.cardIndex + 1];
+      pendingMoneyFocusRef.current = `card-${nextField.key}-0`;
       setClosing((current) => ({ ...current, cardIndex: current.cardIndex + 1, updatedAt: new Date().toISOString() }));
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      focusMoneyField(`card-${nextField.key}-0`);
       return;
     }
 
     if (currentStep.id === "extras" && closing.extraIndex < EXTRA_FIELDS.length - 1) {
+      const nextExtra = EXTRA_FIELDS[closing.extraIndex + 1];
+      pendingMoneyFocusRef.current = `extra-${nextExtra.key}`;
       setClosing((current) => ({ ...current, extraIndex: current.extraIndex + 1, updatedAt: new Date().toISOString() }));
-      window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
 
+    const nextStepId = STEPS[Math.min(closing.step + 1, STEPS.length - 1)]?.id;
+    if (currentStep.id === "notinha" && nextStepId === "extras") {
+      pendingMoneyFocusRef.current = `extra-${EXTRA_FIELDS[0].key}`;
+    } else if (currentStep.id === "extras" && nextStepId === "venda") {
+      pendingMoneyFocusRef.current = "venda-produtos";
+    }
     goToStep(closing.step + 1);
-  }, [closing.cardIndex, closing.extraIndex, closing.step, currentStep.id, goToStep]);
+  }, [closing.cardIndex, closing.extraIndex, closing.step, currentStep.id, focusMoneyField, goToStep]);
 
   const previousStep = useCallback(() => {
     if (currentStep.id === "notinha" && closing.cardIndex > 0) {
+      const previousField = CARD_FIELDS[closing.cardIndex - 1];
+      pendingMoneyFocusRef.current = `card-${previousField.key}-0`;
       setClosing((current) => ({ ...current, cardIndex: current.cardIndex - 1, updatedAt: new Date().toISOString() }));
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      focusMoneyField(`card-${previousField.key}-0`);
       return;
     }
 
     if (currentStep.id === "extras" && closing.extraIndex > 0) {
+      const previousExtra = EXTRA_FIELDS[closing.extraIndex - 1];
+      pendingMoneyFocusRef.current = `extra-${previousExtra.key}`;
       setClosing((current) => ({ ...current, extraIndex: current.extraIndex - 1, updatedAt: new Date().toISOString() }));
-      window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
 
@@ -743,7 +805,7 @@ function App() {
     }
 
     goToStep(closing.step - 1);
-  }, [closing.cardIndex, closing.extraIndex, closing.step, currentStep.id, goToStep]);
+  }, [closing.cardIndex, closing.extraIndex, closing.step, currentStep.id, focusMoneyField, goToStep]);
 
   const updateCardValue = useCallback((fieldKey, index, value) => {
     setClosing((current) => {
@@ -1541,6 +1603,7 @@ function ExtrasStep({ closing, totals, onExtraValue, onOptionalExtraValue }) {
           label={activeExtra.label}
           value={closing.extras[activeExtra.key]}
           onChange={(value) => onExtraValue(activeExtra.key, value)}
+          focusKey={`extra-${activeExtra.key}`}
         />
       </div>
 
@@ -1574,8 +1637,8 @@ function VendaStep({ closing, totals, onVenda, onSobra, onObservations }) {
         <ReceiptText size={24} />
         <p>Informe a venda total do posto do relatório. O troco final é a soma de tudo menos essa venda.</p>
       </div>
-      <MoneyInput label="Venda do Posto" value={closing.vendaProdutos} onChange={onVenda} autoFocus />
-      <MoneyInput label="Sobra da nota" value={closing.sobra} onChange={onSobra} />
+      <MoneyInput label="Venda do Posto" value={closing.vendaProdutos} onChange={onVenda} autoFocus focusKey="venda-produtos" />
+      <MoneyInput label="Sobra da nota" value={closing.sobra} onChange={onSobra} focusKey="sobra-nota" />
       <div className="calculation-card">
         <div>
           <span>Total das entradas</span>
@@ -1741,14 +1804,20 @@ function FinalField({ field, values, total, onChange, active = false }) {
       </div>
       <div className="source-grid">
         {field.sources.map((source, index) => (
-          <MoneyInput key={source} label={source} value={values[index] || ""} onChange={(value) => onChange(index, value)} />
+          <MoneyInput
+            key={source}
+            label={source}
+            value={values[index] || ""}
+            onChange={(value) => onChange(index, value)}
+            focusKey={`card-${field.key}-${index}`}
+          />
         ))}
       </div>
     </article>
   );
 }
 
-function MoneyInput({ label, value, onChange, autoFocus = false }) {
+function MoneyInput({ label, value, onChange, autoFocus = false, focusKey = "" }) {
   return (
     <label className="money-input">
       <span>{label}</span>
@@ -1756,7 +1825,16 @@ function MoneyInput({ label, value, onChange, autoFocus = false }) {
         <small>R$</small>
         <input
           autoFocus={autoFocus}
-          inputMode="numeric"
+          type="text"
+          inputMode="decimal"
+          enterKeyHint="next"
+          autoComplete="off"
+          autoCorrect="off"
+          spellCheck={false}
+          name={`valor-${focusKey || label.replace(/\W+/g, "-").toLowerCase()}`}
+          data-money-focus={focusKey || undefined}
+          data-lpignore="true"
+          data-1p-ignore="true"
           value={value}
           placeholder="0,00"
           onChange={(event) => onChange(event.target.value)}
