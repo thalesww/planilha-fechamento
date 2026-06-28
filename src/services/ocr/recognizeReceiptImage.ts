@@ -15,6 +15,11 @@ function formatMoney(value: number | null | undefined): string {
 }
 
 export function receiptResultToLegacyOcrResult(result: ReceiptOcrResult): LegacyOcrResult {
+  const hasRecognizedSobra = result.totais.diferenca !== null;
+  const expectedSobra = result.totais.diferenca;
+  const recognizedSobra = result.totais.diferenca;
+  const difference = hasRecognizedSobra ? 0 : null;
+
   const legacy: LegacyOcrResult = {
     vendaProdutos: formatMoney(result.vendaProdutos),
     cards: {
@@ -34,13 +39,13 @@ export function receiptResultToLegacyOcrResult(result: ReceiptOcrResult): Legacy
     optionalExtras: {},
     sobra: formatMoney(result.totais.diferenca),
     diferencaSobra: formatMoney(result.totais.diferenca),
-    ocrInconsistent: result.warnings.some((warning) => warning.includes("divergente")),
+    ocrInconsistent: false,
     validation: {
-      isValid: !result.warnings.some((warning) => warning.includes("divergente")),
-      expectedSobra: result.totais.diferenca,
-      recognizedSobra: result.totais.diferenca,
-      hasRecognizedSobra: result.totais.diferenca !== null,
-      difference: 0,
+      isValid: hasRecognizedSobra,
+      expectedSobra,
+      recognizedSobra,
+      hasRecognizedSobra,
+      difference,
     },
     source: result.source,
     warnings: result.warnings,

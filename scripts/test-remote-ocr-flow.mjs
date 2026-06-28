@@ -41,6 +41,19 @@ assert.equal(success.receipt.source, "remote-paddleocr");
 assert.equal(success.legacy.cards.eloDebito[0], "70,00");
 assert.ok(countLegacyValues(receiptResultToLegacyOcrResult(validRemote)) >= 4);
 
+const remoteWithPrintedTotalWarnings = receiptResultToLegacyOcrResult({
+  ...validRemote,
+  totais: {
+    ...validRemote.totais,
+    diferenca: -331.48
+  },
+  warnings: ["total_impresso_divergente", "troco_final_ignorado"]
+});
+
+assert.equal(remoteWithPrintedTotalWarnings.validation.isValid, true);
+assert.equal(remoteWithPrintedTotalWarnings.validation.difference, 0);
+assert.equal(remoteWithPrintedTotalWarnings.ocrInconsistent, false);
+
 let localCalled = false;
 const fallback = await recognizeReceiptImage(new Blob(["fake"]), {
   remoteClient: async () => {
