@@ -385,6 +385,33 @@ function fileToDataUrl(file) {
   });
 }
 
+function isHeicFile(file) {
+  const name = String(file?.name || "").toLowerCase();
+  const type = String(file?.type || "").toLowerCase();
+  return type === "image/heic" || type === "image/heif" || name.endsWith(".heic") || name.endsWith(".heif");
+}
+
+async function convertHeicToJpegFile(file) {
+  const heic2anyModule = await import("heic2any");
+  const heic2any = heic2anyModule.default || heic2anyModule;
+  const converted = await heic2any({
+    blob: file,
+    toType: "image/jpeg",
+    quality: 0.92
+  });
+  const blob = Array.isArray(converted) ? converted[0] : converted;
+  if (!(blob instanceof Blob)) {
+    throw new Error("Conversao HEIC nao retornou uma imagem valida.");
+  }
+  const baseName = file.name?.replace(/\.[^.]+$/, "") || "notinha";
+  return new File([blob], `${baseName}.jpg`, { type: "image/jpeg" });
+}
+
+async function prepareImageFileForOcr(file) {
+  if (!isHeicFile(file)) return file;
+  return convertHeicToJpegFile(file);
+}
+
 function dataUrlToImage(dataUrl) {
   return new Promise((resolve, reject) => {
     const image = new Image();
@@ -806,15 +833,31 @@ function App() {
     const selected = Array.from(files || []);
     if (!selected.length) return;
 
-    const encoded = await Promise.all(
-      selected.map(async (file) => ({
-        id: createId(),
-        name: file.name,
-        size: file.size,
-        dataUrl: await fileToDataUrl(file),
-        addedAt: new Date().toISOString()
-      }))
-    );
+    setMessage("Preparando imagem para OCR.");
+
+    let prepared;
+    try {
+      prepared = await Promise.all(selected.map(prepareImageFileForOcr));
+    } catch {
+      setMessage("Nao consegui converter a foto HEIC. Envie em JPG, PNG ou tire a foto novamente pelo app.");
+      return;
+    }
+
+    let encoded;
+    try {
+      encoded = await Promise.all(
+        prepared.map(async (file) => ({
+          id: createId(),
+          name: file.name,
+          size: file.size,
+          dataUrl: await fileToDataUrl(file),
+          addedAt: new Date().toISOString()
+        }))
+      );
+    } catch {
+      setMessage("Nao consegui abrir a imagem selecionada. Envie em JPG, PNG ou WEBP.");
+      return;
+    }
 
     setClosing((current) => ({
       ...current,
@@ -823,7 +866,7 @@ function App() {
     }));
 
     setOcrCropRequest({
-      file: selected[0],
+      file: prepared[0],
       attachment: encoded[0],
       crop: { x: 6, y: 4, width: 88, height: 92 }
     });
