@@ -773,7 +773,10 @@ function App() {
 
     try {
       const recognized = await recognizeReceiptImage(selected[0], {
-        onProgress: setOcrProgress
+        onProgress: setOcrProgress,
+        onRemoteError: (error) => {
+          console.warn("[OCR] remote OCR failed, falling back to local:", error.message);
+        }
       });
 
       setOcrResult(recognized.legacy || null);

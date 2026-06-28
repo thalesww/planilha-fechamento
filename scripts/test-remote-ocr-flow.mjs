@@ -75,7 +75,9 @@ const fallback = await recognizeReceiptImage(new Blob(["fake"]), {
 assert.equal(localCalled, true);
 assert.equal(fallback.usedFallback, true);
 assert.equal(fallback.receipt.source, "local-fallback");
-assert.deepEqual(fallback.receipt.warnings, ["fallback"]);
+assert.equal(fallback.receipt.warnings.includes("fallback"), true);
+assert.equal(fallback.receipt.warnings.includes("remote_ocr_failed:timeout"), true);
+assert.equal(fallback.legacy.remoteError, "timeout");
 
 const invalidResponseFallback = await recognizeReceiptImage(new Blob(["fake"]), {
   remoteClient: async () => {
@@ -92,5 +94,6 @@ const invalidResponseFallback = await recognizeReceiptImage(new Blob(["fake"]), 
 
 assert.equal(invalidResponseFallback.usedFallback, true);
 assert.equal(invalidResponseFallback.receipt.warnings.includes("invalid_remote_json"), true);
+assert.equal(invalidResponseFallback.receipt.warnings.includes("remote_ocr_failed:invalid"), true);
 
 console.log("remote OCR flow tests passed");

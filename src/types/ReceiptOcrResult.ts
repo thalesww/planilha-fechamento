@@ -63,4 +63,5 @@ export type LegacyOcrResult = {
   validation?: unknown;
   source?: ReceiptOcrResult["source"];
   warnings?: string[];
+  remoteError?: string;
 };

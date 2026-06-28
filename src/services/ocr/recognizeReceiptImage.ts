@@ -4,6 +4,7 @@ import { recognizeReceiptRemote } from "./remoteOcrClient.ts";
 
 export type RecognizeReceiptImageOptions = {
   onProgress?: (message: string) => void;
+  onRemoteError?: (error: Error) => void;
   remoteClient?: typeof recognizeReceiptRemote;
   localFallback?: typeof recognizeReceiptLocalFallback;
 };
@@ -80,11 +81,23 @@ export async function recognizeReceiptImage(
       foundCount: countLegacyValues(legacy),
       usedFallback: false,
     };
-  } catch {
+  } catch (error) {
+    const remoteError = error instanceof Error ? error : new Error("Falha desconhecida no OCR remoto");
+    options.onRemoteError?.(remoteError);
     options.onProgress?.("OCR remoto indisponivel. Usando reconhecimento local.");
     const fallback = await localFallback(image, { onProgress: options.onProgress });
+    const remoteWarning = `remote_ocr_failed:${remoteError.message}`;
     return {
       ...fallback,
+      receipt: {
+        ...fallback.receipt,
+        warnings: [...(fallback.receipt.warnings || []), remoteWarning],
+      },
+      legacy: {
+        ...fallback.legacy,
+        warnings: [...(fallback.legacy.warnings || []), remoteWarning],
+        remoteError: remoteError.message,
+      },
       usedFallback: true,
     };
   }
