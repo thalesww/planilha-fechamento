@@ -10,6 +10,7 @@ export type RemoteOcrClientOptions = {
 const MAX_REMOTE_IMAGE_SIDE = 1800;
 const REMOTE_IMAGE_QUALITY = 0.86;
 const REMOTE_IMAGE_COMPRESS_THRESHOLD = 1.5 * 1024 * 1024;
+const DEFAULT_REMOTE_OCR_TIMEOUT_MS = 90_000;
 
 function envValue(key: string): string {
   return String((import.meta as any).env?.[key] || "").trim();
@@ -82,14 +83,18 @@ export async function recognizeReceiptRemote(
 ): Promise<ReceiptOcrResult> {
   const apiUrl = (options.apiUrl || envValue("VITE_OCR_API_URL")).replace(/\/+$/, "");
   const apiKey = options.apiKey || envValue("VITE_OCR_API_KEY");
-  const timeoutMs = options.timeoutMs || Number(envValue("VITE_OCR_TIMEOUT_MS")) || 20_000;
+  const timeoutMs = options.timeoutMs || Number(envValue("VITE_OCR_TIMEOUT_MS")) || DEFAULT_REMOTE_OCR_TIMEOUT_MS;
 
   if (!apiUrl || !apiKey) {
     throw new Error("OCR remoto nao configurado");
   }
 
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+  let timedOut = false;
+  const timeout = window.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
 
   try {
     const upload = await normalizeImageForRemoteOcr(image);
@@ -115,6 +120,11 @@ export async function recognizeReceiptRemote(
     }
 
     return data;
+  } catch (error) {
+    if (timedOut || controller.signal.aborted) {
+      throw new Error(`tempo limite do OCR remoto (${Math.round(timeoutMs / 1000)}s)`);
+    }
+    throw error;
   } finally {
     window.clearTimeout(timeout);
   }
