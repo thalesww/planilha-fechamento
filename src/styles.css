@@ -622,6 +622,151 @@ h3 {
   background: var(--surface-container);
 }
 
+.crop-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.78);
+}
+
+.crop-modal {
+  display: grid;
+  width: min(100%, 760px);
+  max-height: 94dvh;
+  gap: 12px;
+  overflow: auto;
+  border-radius: 12px;
+  background: var(--surface-container-lowest);
+  padding: 14px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.38);
+}
+
+.crop-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.crop-modal-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.crop-modal-header p {
+  margin: 4px 0 0;
+  color: var(--on-surface-variant);
+  font-size: 0.88rem;
+}
+
+.crop-modal-header button {
+  display: inline-flex;
+  min-width: 42px;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--outline-variant);
+  border-radius: 8px;
+  background: var(--surface-bright);
+  color: var(--primary);
+}
+
+.crop-preview {
+  position: relative;
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
+  overflow: hidden;
+  max-height: 52dvh;
+  border-radius: 8px;
+  background: var(--surface-container);
+}
+
+.crop-preview img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: 52dvh;
+  height: auto;
+}
+
+.crop-box {
+  position: absolute;
+  border: 3px solid var(--primary);
+  background: rgba(66, 99, 235, 0.12);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.34);
+  pointer-events: none;
+}
+
+.crop-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.crop-controls label {
+  display: grid;
+  gap: 5px;
+  color: var(--on-surface-variant);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.crop-controls input {
+  width: 100%;
+}
+
+.crop-shortcuts,
+.crop-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.crop-shortcuts button,
+.crop-actions button {
+  min-height: 44px;
+  flex: 1 1 150px;
+  border-radius: 8px;
+  font-weight: 800;
+}
+
+.crop-shortcuts button,
+.crop-actions .secondary {
+  border: 1px solid var(--outline-variant);
+  background: var(--surface-bright);
+  color: var(--on-surface);
+}
+
+.crop-actions .primary {
+  border: 1px solid var(--primary);
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+@media (max-width: 640px) {
+  .crop-modal {
+    max-height: 96dvh;
+    padding: 12px;
+  }
+
+  .crop-preview {
+    max-height: 44dvh;
+  }
+
+  .crop-preview img {
+    max-height: 44dvh;
+  }
+
+  .crop-controls {
+    grid-template-columns: 1fr;
+  }
+}
+
 .total-card {
   display: grid;
   gap: 2px;

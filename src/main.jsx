@@ -385,6 +385,42 @@ function fileToDataUrl(file) {
   });
 }
 
+function dataUrlToImage(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = reject;
+    image.src = dataUrl;
+  });
+}
+
+function canvasToBlob(canvas, type = "image/jpeg", quality = 0.9) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error("Nao foi possivel gerar o recorte da imagem."));
+    }, type, quality);
+  });
+}
+
+async function cropImageFile(file, cropPercent) {
+  const dataUrl = await fileToDataUrl(file);
+  const image = await dataUrlToImage(dataUrl);
+  const sourceX = Math.round((cropPercent.x / 100) * image.naturalWidth);
+  const sourceY = Math.round((cropPercent.y / 100) * image.naturalHeight);
+  const sourceWidth = Math.round((cropPercent.width / 100) * image.naturalWidth);
+  const sourceHeight = Math.round((cropPercent.height / 100) * image.naturalHeight);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, sourceWidth);
+  canvas.height = Math.max(1, sourceHeight);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas indisponivel para recorte.");
+  ctx.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height);
+  const blob = await canvasToBlob(canvas, "image/jpeg", 0.9);
+  const baseName = file.name?.replace(/\.[^.]+$/, "") || "notinha";
+  return new File([blob], `${baseName}-recorte.jpg`, { type: "image/jpeg" });
+}
+
 function getReceiptCropBounds(imageData, width, height) {
   const data = imageData.data;
   let minX = width;
@@ -557,6 +593,7 @@ function App() {
   const [ocrResult, setOcrResult] = useState(null); // raw parsed result before confirmation
   const [ocrFoundCount, setOcrFoundCount] = useState(0);
   const [ocrAttachmentId, setOcrAttachmentId] = useState("");
+  const [ocrCropRequest, setOcrCropRequest] = useState(null);
   const TOTAL_OCR_FIELDS = 18; // venda + 6 card pairs * 2 + 4 extras + sobra
   // Comprovantes state
   const [comprovantes, setComprovantes] = useState(BLANK_COMPROVANTES);
@@ -737,42 +774,14 @@ function App() {
     setMessage("Exemplo da notinha aplicado para conferencia.");
   }, []);
 
-  const attachAndScan = useCallback(async (files) => {
-    const selected = Array.from(files || []);
-    if (!selected.length) return;
-
-    // Encode files for preview
-    const encoded = await Promise.all(
-      selected.map((file) =>
-        new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () =>
-            resolve({
-              id: createId(),
-              name: file.name,
-              size: file.size,
-              dataUrl: reader.result,
-              addedAt: new Date().toISOString()
-            });
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        })
-      )
-    );
-
-    setClosing((current) => ({
-      ...current,
-      attachments: [...current.attachments, ...encoded],
-      updatedAt: new Date().toISOString()
-    }));
-
+  const runOcrForImage = useCallback(async (image, attachmentId) => {
     setOcrStatus("running");
     setOcrProgress("Reconhecendo recibo...");
     setOcrResult(null);
-    setOcrAttachmentId(encoded[0]?.id || "");
+    setOcrAttachmentId(attachmentId || "");
 
     try {
-      const recognized = await recognizeReceiptImage(selected[0], {
+      const recognized = await recognizeReceiptImage(image, {
         onProgress: setOcrProgress,
         onRemoteError: (error) => {
           console.warn("[OCR] remote OCR failed, falling back to local:", error.message);
@@ -792,6 +801,60 @@ function App() {
       setMessage("Nao consegui ler a notinha por OCR. A foto foi anexada. Preencha manualmente.");
     }
   }, []);
+
+  const attachAndScan = useCallback(async (files) => {
+    const selected = Array.from(files || []);
+    if (!selected.length) return;
+
+    const encoded = await Promise.all(
+      selected.map(async (file) => ({
+        id: createId(),
+        name: file.name,
+        size: file.size,
+        dataUrl: await fileToDataUrl(file),
+        addedAt: new Date().toISOString()
+      }))
+    );
+
+    setClosing((current) => ({
+      ...current,
+      attachments: [...current.attachments, ...encoded],
+      updatedAt: new Date().toISOString()
+    }));
+
+    setOcrCropRequest({
+      file: selected[0],
+      attachment: encoded[0],
+      crop: { x: 6, y: 4, width: 88, height: 92 }
+    });
+    setMessage("Ajuste o recorte da notinha antes do OCR.");
+  }, []);
+
+  const cancelOcrCrop = useCallback(() => {
+    setOcrCropRequest(null);
+    setMessage("OCR cancelado. A foto continua anexada.");
+  }, []);
+
+  const skipOcrCrop = useCallback(() => {
+    if (!ocrCropRequest) return;
+    const request = ocrCropRequest;
+    setOcrCropRequest(null);
+    runOcrForImage(request.file, request.attachment?.id || "");
+  }, [ocrCropRequest, runOcrForImage]);
+
+  const confirmOcrCrop = useCallback(async (crop) => {
+    if (!ocrCropRequest) return;
+    const request = ocrCropRequest;
+    setOcrCropRequest(null);
+    setMessage("Recorte aplicado. Enviando para OCR remoto.");
+    try {
+      const croppedFile = await cropImageFile(request.file, crop);
+      await runOcrForImage(croppedFile, request.attachment?.id || "");
+    } catch {
+      setMessage("Nao consegui aplicar o recorte. Enviando a imagem original para OCR.");
+      await runOcrForImage(request.file, request.attachment?.id || "");
+    }
+  }, [ocrCropRequest, runOcrForImage]);
 
   const attachFiles = useCallback(async (files) => {
     const selected = Array.from(files || []);
@@ -984,6 +1047,15 @@ function App() {
       {ocrStatus === "running" && <OcrLoadingOverlay progress={ocrProgress} />}
       {qrModalOpen && <QrSendModal payload={qrPayload} onClose={() => setQrModalOpen(false)} />}
       {qrScannerOpen && <QrScanModal onApply={applyQrPayload} onClose={() => setQrScannerOpen(false)} />}
+      {ocrCropRequest ? (
+        <OcrCropModal
+          attachment={ocrCropRequest.attachment}
+          initialCrop={ocrCropRequest.crop}
+          onCancel={cancelOcrCrop}
+          onSkip={skipOcrCrop}
+          onConfirm={confirmOcrCrop}
+        />
+      ) : null}
       {previewAttachment ? (
         <AttachmentPreviewModal attachment={previewAttachment} onClose={() => setPreviewAttachment(null)} />
       ) : null}
@@ -1141,6 +1213,83 @@ function App() {
     </main>
       )}
     </>
+  );
+}
+
+
+function OcrCropModal({ attachment, initialCrop, onCancel, onSkip, onConfirm }) {
+  const [crop, setCrop] = useState(initialCrop || { x: 6, y: 4, width: 88, height: 92 });
+
+  const updateCrop = (key, value) => {
+    setCrop((current) => {
+      const next = { ...current, [key]: Number(value) };
+      next.x = Math.max(0, Math.min(88, next.x));
+      next.y = Math.max(0, Math.min(88, next.y));
+      next.width = Math.max(12, Math.min(next.width, 100 - next.x));
+      next.height = Math.max(12, Math.min(next.height, 100 - next.y));
+      return next;
+    });
+  };
+
+  const resetCrop = () => setCrop({ x: 6, y: 4, width: 88, height: 92 });
+  const fullImage = () => setCrop({ x: 0, y: 0, width: 100, height: 100 });
+
+  return (
+    <div className="crop-modal-backdrop" role="dialog" aria-modal="true" aria-label="Recortar imagem antes do OCR">
+      <section className="crop-modal">
+        <header className="crop-modal-header">
+          <div>
+            <h2>Recortar notinha</h2>
+            <p>Ajuste para deixar apenas o recibo antes do OCR.</p>
+          </div>
+          <button type="button" onClick={onCancel} aria-label="Cancelar recorte">
+            <X size={20} />
+          </button>
+        </header>
+
+        <div className="crop-preview">
+          <img src={attachment?.dataUrl} alt={attachment?.name || "Imagem da notinha"} />
+          <div
+            className="crop-box"
+            style={{
+              left: `${crop.x}%`,
+              top: `${crop.y}%`,
+              width: `${crop.width}%`,
+              height: `${crop.height}%`
+            }}
+          />
+        </div>
+
+        <div className="crop-controls">
+          <label>
+            <span>Esquerda</span>
+            <input type="range" min="0" max="88" value={crop.x} onChange={(event) => updateCrop("x", event.target.value)} />
+          </label>
+          <label>
+            <span>Topo</span>
+            <input type="range" min="0" max="88" value={crop.y} onChange={(event) => updateCrop("y", event.target.value)} />
+          </label>
+          <label>
+            <span>Largura</span>
+            <input type="range" min="12" max={100 - crop.x} value={crop.width} onChange={(event) => updateCrop("width", event.target.value)} />
+          </label>
+          <label>
+            <span>Altura</span>
+            <input type="range" min="12" max={100 - crop.y} value={crop.height} onChange={(event) => updateCrop("height", event.target.value)} />
+          </label>
+        </div>
+
+        <div className="crop-shortcuts">
+          <button type="button" onClick={resetCrop}>Recibo inteiro</button>
+          <button type="button" onClick={fullImage}>Imagem toda</button>
+        </div>
+
+        <footer className="crop-actions">
+          <button type="button" className="secondary" onClick={onSkip}>Enviar sem recortar</button>
+          <button type="button" className="primary" onClick={() => onConfirm(crop)}>Usar recorte no OCR</button>
+        </footer>
+      </section>
+    </div>
   );
 }
 
