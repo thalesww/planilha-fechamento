@@ -784,7 +784,7 @@ function App() {
       setOcrStatus("done");
       setMessage(
         recognized.usedFallback
-          ? "OCR remoto indisponivel. Usando reconhecimento local."
+          ? `OCR remoto indisponivel (${recognized.legacy?.remoteError || "erro desconhecido"}). Usando reconhecimento local.`
           : "Reconhecimento concluido pelo OCR remoto."
       );
     } catch {
