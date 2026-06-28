@@ -129,35 +129,79 @@ const EXTRA_REVIEW_FIELDS = [
 ];
 
 // ── Loading overlay ────────────────────────────────────────────────────────────
+const OCR_LOADING_STEPS = [
+  'Preparando imagem',
+  'Enviando para o OCR remoto',
+  'Lendo linhas do recibo',
+  'Separando bandeiras e TEF',
+  'Conferindo somas',
+  'Montando resultado',
+];
+
+const OCR_LOADING_MESSAGES = [
+  'Pode levar ate 90 segundos em fotos grandes.',
+  'A imagem continua salva se o remoto demorar.',
+  'Estamos procurando valores, labels e totais.',
+  'Se o remoto falhar, o app usa o OCR local.',
+  'Fotos recortadas costumam ficar bem melhores.',
+];
+
 export function OcrLoadingOverlay({ progress }) {
+  const [tick, setTick] = useState(0);
+  const [seconds, setSeconds] = useState(0);
+
+  useEffect(() => {
+    const messageTimer = window.setInterval(() => setTick((value) => value + 1), 4200);
+    const secondTimer = window.setInterval(() => setSeconds((value) => value + 1), 1000);
+    return () => {
+      window.clearInterval(messageTimer);
+      window.clearInterval(secondTimer);
+    };
+  }, []);
+
+  const activeStep = Math.min(OCR_LOADING_STEPS.length - 1, Math.floor(seconds / 15));
+  const message = OCR_LOADING_MESSAGES[tick % OCR_LOADING_MESSAGES.length];
+  const elapsedLabel = seconds < 60
+    ? `${seconds}s`
+    : `${Math.floor(seconds / 60)}min ${String(seconds % 60).padStart(2, '0')}s`;
+
   return (
     <div className="ocr-loading-overlay">
       <div className="ocr-loading-card">
-        <div className="ocr-spinner-ring">
-          <svg viewBox="0 0 56 56" className="ocr-spinner-svg">
-            <circle cx="28" cy="28" r="22" fill="none" stroke="var(--outline-variant)" strokeWidth="4" />
-            <circle
-              cx="28" cy="28" r="22"
-              fill="none"
-              stroke="var(--primary)"
-              strokeWidth="4"
-              strokeDasharray="138"
-              strokeDashoffset="100"
-              strokeLinecap="round"
-              className="ocr-spinner-arc"
-            />
-          </svg>
+        <div className="ocr-scanner" aria-hidden="true">
+          <div className="ocr-scanner-paper">
+            <span />
+            <span />
+            <span />
+            <span />
+          </div>
+          <div className="ocr-scanner-line" />
+          <div className="ocr-scanner-glow" />
         </div>
-        <p className="ocr-loading-title">Lendo notinha…</p>
-        <p className="ocr-loading-sub">{progress || 'Aguarde, processando imagem com OCR'}</p>
+        <div className="ocr-loading-copy">
+          <p className="ocr-loading-title">Lendo notinha...</p>
+          <p className="ocr-loading-sub">{progress || 'Aguarde, processando imagem com OCR'}</p>
+          <p key={message} className="ocr-loading-hint">{message}</p>
+        </div>
         <div className="ocr-loading-bar">
           <div className="ocr-loading-bar-fill" />
+        </div>
+        <div className="ocr-loading-steps" aria-label="Etapas do OCR">
+          {OCR_LOADING_STEPS.map((step, index) => (
+            <span key={step} className={index <= activeStep ? 'active' : ''}>
+              {step}
+            </span>
+          ))}
+        </div>
+        <div className="ocr-loading-footer">
+          <span>Tempo: {elapsedLabel}</span>
+          <span>OCR remoto</span>
         </div>
       </div>
     </div>
   );
 }
-// ── Result panel ───────────────────────────────────────────────────────────────
+// Result panel ───────────────────────────────────────────────────────────────
 export function OcrReviewPanel({
   ocrResult,
   foundCount,
