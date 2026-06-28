@@ -5,6 +5,13 @@ export type RemoteOcrClientOptions = {
   apiUrl?: string;
   apiKey?: string;
   timeoutMs?: number;
+  onUploadPrepared?: (upload: RemoteOcrUploadInfo) => void;
+};
+
+export type RemoteOcrUploadInfo = {
+  blob: Blob;
+  filename: string;
+  dataUrl: string;
 };
 
 const MAX_REMOTE_IMAGE_SIDE = 1800;
@@ -45,6 +52,15 @@ function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number):
       if (blob) resolve(blob);
       else reject(new Error("Nao foi possivel comprimir imagem para OCR remoto"));
     }, type, quality);
+  });
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Nao foi possivel preparar preview do OCR remoto"));
+    reader.readAsDataURL(blob);
   });
 }
 
@@ -98,6 +114,10 @@ export async function recognizeReceiptRemote(
 
   try {
     const upload = await normalizeImageForRemoteOcr(image);
+    options.onUploadPrepared?.({
+      ...upload,
+      dataUrl: await blobToDataUrl(upload.blob),
+    });
     const form = new FormData();
     form.append("file", upload.blob, upload.filename);
 

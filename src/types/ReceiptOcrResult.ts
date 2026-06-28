@@ -51,6 +51,12 @@ export type ReceiptOcrResult = {
   warnings: string[];
 };
 
+export type OcrEvidenceLine = {
+  text: string;
+  confidence?: number;
+  bbox?: number[][];
+};
+
 export type LegacyOcrResult = {
   vendaProdutos: string;
   cards: Record<string, string[]>;
@@ -64,4 +70,6 @@ export type LegacyOcrResult = {
   source?: ReceiptOcrResult["source"];
   warnings?: string[];
   remoteError?: string;
+  ocrImageDataUrl?: string;
+  evidence?: Record<string, OcrEvidenceLine[]>;
 };

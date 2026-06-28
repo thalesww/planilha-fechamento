@@ -1283,9 +1283,9 @@ h3 {
 }
 
 .ocr-review-source-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
   gap: 8px;
 }
 
@@ -1315,6 +1315,57 @@ h3 {
   border-color: var(--primary);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 18%, transparent);
   outline: none;
+}
+
+.ocr-evidence {
+  grid-column: 1 / -1;
+  margin-top: 2px;
+}
+
+.ocr-evidence summary {
+  width: fit-content;
+  min-height: 32px;
+  cursor: pointer;
+  border: 1px solid var(--outline-variant);
+  border-radius: 8px;
+  background: var(--surface-container-lowest);
+  padding: 6px 10px;
+  color: var(--primary);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.ocr-evidence-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.ocr-evidence-item {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  border: 1px solid var(--outline-variant);
+  border-radius: 8px;
+  background: var(--surface-container-lowest);
+  padding: 6px;
+}
+
+.ocr-evidence-img {
+  display: block;
+  width: 100%;
+  max-height: 92px;
+  object-fit: contain;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.ocr-evidence-text,
+.ocr-evidence-item figcaption {
+  color: var(--on-surface-variant);
+  font-size: 0.72rem;
+  line-height: 1.25;
+  word-break: break-word;
 }
 
 .ocr-review-sum-row {

@@ -808,12 +808,17 @@ function App() {
     setOcrAttachmentId(attachmentId || "");
 
     try {
+      let remoteOcrImageDataUrl = "";
       const recognized = await recognizeReceiptImage(image, {
         onProgress: setOcrProgress,
+        onRemoteUploadPrepared: (imageDataUrl) => {
+          remoteOcrImageDataUrl = imageDataUrl;
+        },
         onRemoteError: (error) => {
           console.warn("[OCR] remote OCR failed, falling back to local:", error.message);
         }
       });
+      if (recognized.legacy) recognized.legacy.ocrImageDataUrl = remoteOcrImageDataUrl;
 
       setOcrResult(recognized.legacy || null);
       setOcrFoundCount(recognized.foundCount || 0);

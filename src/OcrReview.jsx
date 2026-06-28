@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
 
 function parseMoney(value) {
@@ -13,6 +13,91 @@ function parseMoney(value) {
 
 function formatCurrency(value) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
+}
+
+function getBBoxBounds(bbox) {
+  if (!Array.isArray(bbox) || !bbox.length) return null;
+  const xs = bbox.map(point => Number(point?.[0])).filter(Number.isFinite);
+  const ys = bbox.map(point => Number(point?.[1])).filter(Number.isFinite);
+  if (!xs.length || !ys.length) return null;
+  return {
+    x: Math.min(...xs),
+    y: Math.min(...ys),
+    width: Math.max(...xs) - Math.min(...xs),
+    height: Math.max(...ys) - Math.min(...ys),
+  };
+}
+
+function EvidenceImage({ imageDataUrl, line }) {
+  const [src, setSrc] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!imageDataUrl || !line?.bbox) {
+      setSrc('');
+      return undefined;
+    }
+
+    const image = new Image();
+    image.onload = () => {
+      if (cancelled) return;
+      const bounds = getBBoxBounds(line.bbox);
+      if (!bounds || bounds.width <= 0 || bounds.height <= 0) {
+        setSrc('');
+        return;
+      }
+      const marginX = Math.max(10, bounds.width * 0.18);
+      const marginY = Math.max(8, bounds.height * 0.65);
+      const sourceX = Math.max(0, Math.floor(bounds.x - marginX));
+      const sourceY = Math.max(0, Math.floor(bounds.y - marginY));
+      const sourceRight = Math.min(image.naturalWidth || image.width, Math.ceil(bounds.x + bounds.width + marginX));
+      const sourceBottom = Math.min(image.naturalHeight || image.height, Math.ceil(bounds.y + bounds.height + marginY));
+      const sourceWidth = Math.max(1, sourceRight - sourceX);
+      const sourceHeight = Math.max(1, sourceBottom - sourceY);
+      const canvas = document.createElement('canvas');
+      const scale = Math.min(2, Math.max(1, 420 / sourceWidth));
+      canvas.width = Math.round(sourceWidth * scale);
+      canvas.height = Math.round(sourceHeight * scale);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        setSrc('');
+        return;
+      }
+      ctx.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height);
+      setSrc(canvas.toDataURL('image/jpeg', 0.86));
+    };
+    image.onerror = () => !cancelled && setSrc('');
+    image.src = imageDataUrl;
+
+    return () => {
+      cancelled = true;
+    };
+  }, [imageDataUrl, line]);
+
+  if (!src) {
+    return <span className="ocr-evidence-text">{line?.text || 'Trecho sem imagem'}</span>;
+  }
+
+  return <img className="ocr-evidence-img" src={src} alt={line?.text || 'Trecho usado pelo OCR'} />;
+}
+
+function OcrEvidence({ ocrResult, evidenceKey }) {
+  const lines = ocrResult?.evidence?.[evidenceKey] || [];
+  if (!ocrResult?.ocrImageDataUrl || !lines.length) return null;
+
+  return (
+    <details className="ocr-evidence">
+      <summary>Trecho usado</summary>
+      <div className="ocr-evidence-list">
+        {lines.map((line, index) => (
+          <figure key={`${evidenceKey}-${index}`} className="ocr-evidence-item">
+            <EvidenceImage imageDataUrl={ocrResult.ocrImageDataUrl} line={line} />
+            <figcaption>{line.text}</figcaption>
+          </figure>
+        ))}
+      </div>
+    </details>
+  );
 }
 
 // CARD_FIELDS mirror — needed to build the review list
@@ -144,6 +229,7 @@ export function OcrReviewPanel({
                   placeholder="0,00"
                   onChange={(event) => onChangeVendaProdutos?.(event.target.value)}
                 />
+                <OcrEvidence ocrResult={ocrResult} evidenceKey="vendaProdutos" />
               </div>
             </div>
           </div>
@@ -164,6 +250,7 @@ export function OcrReviewPanel({
                       placeholder="0,00"
                       onChange={(event) => onChangeCardValue?.(row.key, i, event.target.value)}
                     />
+                    <OcrEvidence ocrResult={ocrResult} evidenceKey={`cards.${row.key}.${i}`} />
                   </div>
                 ))}
                 {row.v0 > 0 && row.v1 > 0 && (
@@ -191,6 +278,7 @@ export function OcrReviewPanel({
                     placeholder="0,00"
                     onChange={(event) => onChangeExtraValue?.(row.key, event.target.value)}
                   />
+                  <OcrEvidence ocrResult={ocrResult} evidenceKey={`extras.${row.key}`} />
                 </div>
               </div>
             </div>
@@ -210,6 +298,7 @@ export function OcrReviewPanel({
                   placeholder="0,00"
                   onChange={(event) => onChangeSobra?.(event.target.value)}
                 />
+                <OcrEvidence ocrResult={ocrResult} evidenceKey="sobra" />
               </div>
             </div>
           </div>
