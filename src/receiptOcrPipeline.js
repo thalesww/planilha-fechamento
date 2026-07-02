@@ -1,13 +1,6 @@
 import { normalizeOcrText, parseMoney } from "./receiptOcr.js";
 
-const DEFAULT_IGNORE_RULES = [
-  {
-    key: "trocoFinal",
-    enabled: true,
-    patterns: [/\bTROCO\b.*\bFINAL\b/],
-    reason: "troco_final"
-  }
-];
+const DEFAULT_IGNORE_RULES = [];
 
 const NUMBER_PATTERN = /[-+]?\s*\d{1,3}(?:[.,]\d{3})*[.,]\d{2}|[-+]?\s*\d+[.,]\d{2}|[-+]?\s*\d{3,5}/g;
 
@@ -81,6 +74,7 @@ const CLASSIFIERS = [
   { section: "formasPagamento", key: "pix", patterns: [/\bQRLIX\b/, /\bQRLINX\b/, /\bGRLINX\b/, /\bORLINX\b/, /\bRLINX\b/, /\bPIX\b.*\bSMART\b/, /\bPIX\b/] },
   { section: "formasPagamento", key: "notaPrazo", patterns: [/\bNOTA\b.*\bPRAZO\b/, /\bPRAZO\b/] },
   { section: "outrasSaidas", key: "sangria", patterns: [/\bSANGRIA\b/, /\bANGRIA\b/, /\bANGRTA\b/] },
+  { section: "outrasSaidas", key: "trocoFinal", patterns: [/\bTROCO\b.*\bFINAL\b/] },
   { section: "formasPagamento", key: "tefVisaElectron", patterns: [/\bTE[FP]\b.*\b[VU]ISA\b.*\bELECTR?ON\b/, /\bTE[FP]\b.*\bELECTR?ON\b/] },
   { section: "formasPagamento", key: "tefVisa", patterns: [/\bTE[FP]\b.*\b[VU]ISA\b/] },
   { section: "formasPagamento", key: "visaElectron", patterns: [/\b[VU]ISA\b.*\bELECTR?ON\b/] },

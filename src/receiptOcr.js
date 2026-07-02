@@ -61,7 +61,8 @@ export function createEmptyOcrResult() {
       abasteceAi: "",
       pixStone: "",
       notaPrazo: "",
-      sangria: ""
+      sangria: "",
+      trocoFinal: ""
     },
     optionalExtras: {},
     sobra: "",
@@ -267,6 +268,8 @@ export function parseReceiptOcrText(text) {
       setIfEmpty(result, "extras", "notaPrazo", value);
     } else if (line.includes("ANGR") || line.includes("SANGRIA")) {
       setIfEmpty(result, "extras", "sangria", value);
+    } else if (line.includes("TROCO") && line.includes("FINAL")) {
+      setIfEmpty(result, "extras", "trocoFinal", value);
     } else if (line.includes("ELO") && line.includes("CREDIT")) {
       setIfEmpty(result, "cards", "eloCredito", isTefLine(line) ? 1 : 0, value);
     } else if (line.includes("ELO") && line.includes("DEBIT")) {

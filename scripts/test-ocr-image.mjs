@@ -85,17 +85,18 @@ const textCases = [
         abasteceAi: "994,68",
         pixStone: "1.724,05",
         notaPrazo: "174,11",
-        sangria: "1.294,00"
+        sangria: "1.294,00",
+        trocoFinal: "200,00"
       },
       sobra: "-131,48",
       diferencaSobra: "-131,48"
     },
     expectedTotals: {
       cardTotal: 10068.72,
-      extraTotal: 4186.84,
-      calculatedSobra: -331.48,
+      extraTotal: 4386.84,
+      calculatedSobra: -131.48,
       recognizedSobra: -131.48,
-      isInconsistent: true
+      isInconsistent: false
     }
   }
 ];

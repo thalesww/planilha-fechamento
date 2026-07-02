@@ -90,6 +90,7 @@ export function legacyToReceiptOcrResult(
     pixStoneQrlix: moneyNumber(legacy.extras?.pixStone),
     notaPrazo: moneyNumber(legacy.extras?.notaPrazo),
     sangriaDinheiro: moneyNumber(legacy.extras?.sangria),
+    trocoFinal: moneyNumber(legacy.extras?.trocoFinal),
   };
   const compactFormas = Object.fromEntries(
     Object.entries(formasPagamento).filter(([, value]) => typeof value === "number"),

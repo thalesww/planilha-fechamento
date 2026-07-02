@@ -26,7 +26,7 @@ const aliases = [
   ["TEF - MAESTRO 1859.19", "formasPagamento", "tefMaestro"],
   ["ELO CREDITO 142.00", "formasPagamento", "eloCredito"],
   ["TEF - ELO CREDITO 599.46", "formasPagamento", "tefEloCredito"],
-  ["TROCO FINAL 200.00", "ignorado", "trocoFinal"]
+  ["TROCO FINAL 200.00", "outrasSaidas", "trocoFinal"]
 ];
 
 for (const [line, section, key] of aliases) {
@@ -54,16 +54,13 @@ assert.deepEqual(turno1.warnings, []);
 const turno2 = parseReceiptLines(readFixture("receipt-whatsapp-20260626-turno2.txt"));
 closeTo(turno2.vendaProdutos, 14587.04, "turno2 venda");
 closeTo(turno2.totalFormasPagamento, 12961.56, "turno2 formas");
-closeTo(turno2.totalOutrasSaidas, 1294, "turno2 outras sem troco final");
-closeTo(turno2.totalUsado, 14255.56, "turno2 total usado");
-closeTo(turno2.diferenca, -331.48, "turno2 diferenca sem troco final");
-assert.equal(turno2.ignorados.length, 1);
-assert.equal(turno2.ignorados[0].key, "trocoFinal");
-assert.equal(turno2.ignorados[0].value, 200);
-assert.ok(turno2.warnings.includes("total_outras_saidas_divergente"));
-assert.ok(turno2.warnings.includes("diferenca_impressa_divergente"));
+closeTo(turno2.totalOutrasSaidas, 1494, "turno2 outras com troco final");
+closeTo(turno2.totalUsado, 14455.56, "turno2 total usado");
+closeTo(turno2.diferenca, -131.48, "turno2 diferenca com troco final");
+assert.equal(turno2.ignorados.length, 0);
+assert.deepEqual(turno2.warnings, []);
 
 const withVale = calculateClosing(turno2, { vale: 329 });
-closeTo(withVale.diferenca, -660.48, "vale adjustment");
+closeTo(withVale.diferenca, -460.48, "vale adjustment");
 
 console.log("receipt OCR pipeline tests passed");

@@ -12,7 +12,8 @@
     "test:remote-ocr": "node --experimental-strip-types scripts/test-remote-ocr-flow.mjs",
     "test:ocr-validation": "node scripts/test-ocr-validation.mjs",
     "test:ocr-sobra-sign": "node scripts/test-ocr-sobra-sign.mjs",
-    "test:ocr": "node scripts/test-ocr-image.mjs"
+    "test:ocr": "node scripts/test-ocr-image.mjs",
+    "test:ocr-clipboard": "node scripts/test-ocr-clipboard-fixtures.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.0.0",

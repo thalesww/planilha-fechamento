@@ -5,6 +5,7 @@ import {
   receiptResultToLegacyOcrResult,
   recognizeReceiptImage
 } from "../src/services/ocr/recognizeReceiptImage.ts";
+import { recognizeReceiptRemote } from "../src/services/ocr/remoteOcrClient.ts";
 import { isValidReceiptOcrResult } from "../src/services/ocr/validateReceiptOcrResult.ts";
 
 const validRemote = {
@@ -108,5 +109,53 @@ const invalidResponseFallback = await recognizeReceiptImage(new Blob(["fake"]), 
 assert.equal(invalidResponseFallback.usedFallback, true);
 assert.equal(invalidResponseFallback.receipt.warnings.includes("invalid_remote_json"), true);
 assert.equal(invalidResponseFallback.receipt.warnings.includes("remote_ocr_failed:invalid"), true);
+
+const oldWindow = globalThis.window;
+const oldFileReader = globalThis.FileReader;
+const oldFetch = globalThis.fetch;
+
+globalThis.window = {
+  setTimeout: globalThis.setTimeout.bind(globalThis),
+  clearTimeout: globalThis.clearTimeout.bind(globalThis)
+};
+globalThis.FileReader = class {
+  onload = null;
+  onerror = null;
+  result = "";
+  readAsDataURL() {
+    this.result = "data:image/png;base64,ZmFrZQ==";
+    this.onload?.();
+  }
+};
+
+let fetchCall = 0;
+globalThis.fetch = async (url) => {
+  fetchCall += 1;
+  if (fetchCall === 1) {
+    assert.equal(String(url).endsWith("/api/ocr/receipt"), true);
+    return new Response(JSON.stringify({ jobId: "job-1", status: "queued" }), { status: 202 });
+  }
+  if (fetchCall === 2) {
+    assert.equal(String(url).endsWith("/api/ocr/jobs/job-1"), true);
+    return new Response(JSON.stringify({ jobId: "job-1", status: "processing", result: null, error: null }), { status: 200 });
+  }
+  return new Response(JSON.stringify({ jobId: "job-1", status: "done", result: validRemote, error: null }), { status: 200 });
+};
+
+const asyncJobResult = await recognizeReceiptRemote(new Blob(["fake"], { type: "image/png" }), {
+  apiUrl: "https://example.test",
+  apiKey: "test-key",
+  timeoutMs: 1000,
+  uploadTimeoutMs: 1000,
+  pollIntervalMs: 1
+});
+
+assert.equal(asyncJobResult.ok, true);
+assert.equal(asyncJobResult.vendaProdutos, 100);
+assert.equal(fetchCall, 3);
+
+globalThis.fetch = oldFetch;
+globalThis.window = oldWindow;
+globalThis.FileReader = oldFileReader;
 
 console.log("remote OCR flow tests passed");

@@ -7,7 +7,7 @@ function parseMoney(value) {
   return isFinite(parsed) ? parsed : 0;
 }
 
-export default function Resumo({ closing, lancamentos, totals, onCopy, onCsv, onPrint, onSave, onBack, formatCurrency }) {
+export default function Resumo({ closing, lancamentos, totals, onCopy, onSave, onBack, formatCurrency }) {
   const [toastVisible, setToastVisible] = useState(false);
 
   const handleCopy = () => {
@@ -87,31 +87,18 @@ export default function Resumo({ closing, lancamentos, totals, onCopy, onCsv, on
           </div>
         </div>
 
-        {/* Action Grid */}
-        <div className="grid grid-cols-2 gap-3 mt-6">
+        <div className="grid grid-cols-1 gap-3 mt-6">
           <button 
             onClick={handleCopy}
-            className="col-span-2 min-h-[48px] bg-primary text-on-primary rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-surface-tint active:scale-95 transition-transform">
+            className="min-h-[48px] bg-primary text-on-primary rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-surface-tint active:scale-95 transition-transform">
             <span className="material-symbols-outlined">content_copy</span>
             Copiar Resumo
           </button>
           <button 
-            onClick={onCsv}
-            className="min-h-[48px] bg-surface-container-lowest border-2 border-primary text-primary rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-surface-container-low active:scale-95 transition-transform">
-            <span className="material-symbols-outlined">csv</span>
-            Exportar CSV
-          </button>
-          <button 
-            onClick={onPrint}
-            className="min-h-[48px] bg-surface-container-lowest border-2 border-primary text-primary rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-surface-container-low active:scale-95 transition-transform">
-            <span className="material-symbols-outlined">picture_as_pdf</span>
-            Gerar PDF
-          </button>
-          <button 
             onClick={onSave}
-            className="col-span-2 min-h-[48px] bg-surface-container-high text-on-surface rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-surface-variant active:scale-95 transition-transform mt-2">
-            <span className="material-symbols-outlined">save</span>
-            Salvar Fechamento
+            className="min-h-[48px] bg-surface-container-high text-on-surface rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-surface-variant active:scale-95 transition-transform">
+            <span className="material-symbols-outlined">check_circle</span>
+            Dados passados na planilha
           </button>
         </div>
       </main>

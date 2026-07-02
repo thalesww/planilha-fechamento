@@ -110,14 +110,39 @@ const STEPS = [
 
 const BLANK_COMPROVANTES = {
   terminals: [
-    { total: "", photos: [] },
-    { total: "", photos: [] },
-    { total: "", photos: [] },
+    { total: "", photos: [], printedAttached: false },
+    { total: "", photos: [], printedAttached: false },
+    { total: "", photos: [], printedAttached: false },
   ],
   totalCofre: "",
   coffrePhotos: [],
   sangriaPhotos: [],
+  coffrePrintedAttached: false,
+  sangriaPhotosAttached: false,
+  otherDocsPhotos: [],
+  otherDocsNote: "",
+  noOtherDocs: false,
 };
+
+function normalizeComprovantes(raw) {
+  return {
+    ...BLANK_COMPROVANTES,
+    ...(raw || {}),
+    terminals: BLANK_COMPROVANTES.terminals.map((terminal, index) => ({
+      ...terminal,
+      ...(raw?.terminals?.[index] || {}),
+      photos: Array.isArray(raw?.terminals?.[index]?.photos) ? raw.terminals[index].photos : [],
+      printedAttached: Boolean(raw?.terminals?.[index]?.printedAttached)
+    })),
+    coffrePhotos: Array.isArray(raw?.coffrePhotos) ? raw.coffrePhotos : [],
+    sangriaPhotos: Array.isArray(raw?.sangriaPhotos) ? raw.sangriaPhotos : [],
+    otherDocsPhotos: Array.isArray(raw?.otherDocsPhotos) ? raw.otherDocsPhotos : [],
+    coffrePrintedAttached: Boolean(raw?.coffrePrintedAttached),
+    sangriaPhotosAttached: Boolean(raw?.sangriaPhotosAttached),
+    noOtherDocs: Boolean(raw?.noOtherDocs),
+    otherDocsNote: raw?.otherDocsNote || ""
+  };
+}
 
 const CARD_GROUPS = [
   {
@@ -250,6 +275,7 @@ function createBlankClosing() {
     diferencaSobra: "",
     observations: "",
     attachments: [],
+    comprovantes: normalizeComprovantes(),
     status: "rascunho",
     savedAt: ""
   };
@@ -277,6 +303,7 @@ function normalizeClosing(raw) {
     sobra: raw?.sobra ?? sobraInformada ?? blank.sobra,
     diferencaSobra: raw?.diferencaSobra || blank.diferencaSobra,
     attachments: Array.isArray(raw?.attachments) ? raw.attachments : [],
+    comprovantes: normalizeComprovantes(raw?.comprovantes),
     step: Number.isInteger(raw?.step) ? Math.min(Math.max(raw.step, 0), STEPS.length - 1) : 0,
     cardIndex: Number.isInteger(raw?.cardIndex) ? Math.min(Math.max(raw.cardIndex, 0), CARD_FIELDS.length - 1) : 0,
     extraIndex: Number.isInteger(raw?.extraIndex) ? Math.min(Math.max(raw.extraIndex, 0), EXTRA_FIELDS.length - 1) : 0
@@ -623,7 +650,7 @@ function App() {
   const [ocrCropRequest, setOcrCropRequest] = useState(null);
   const TOTAL_OCR_FIELDS = 18; // venda + 6 card pairs * 2 + 4 extras + sobra
   // Comprovantes state
-  const [comprovantes, setComprovantes] = useState(BLANK_COMPROVANTES);
+  const [comprovantes, setComprovantes] = useState(() => normalizeComprovantes(closing.comprovantes));
 
   const totals = useMemo(() => calculateTotals(closing), [closing]);
   const summary = useMemo(() => buildSummary(closing, totals), [closing, totals]);
@@ -631,6 +658,7 @@ function App() {
   const currentStep = STEPS[closing.step];
   const ocrAttachment = closing.attachments.find((attachment) => attachment.id === ocrAttachmentId) || null;
   const pendingMoneyFocusRef = useRef("");
+  const lastMoneyFocusRef = useRef("");
 
   const focusMoneyField = useCallback((focusKey) => {
     if (!focusKey) return;
@@ -642,6 +670,7 @@ function App() {
       input.scrollIntoView({ block: "center", behavior: "smooth" });
       input.focus({ preventScroll: true });
       input.select();
+      lastMoneyFocusRef.current = focusKey;
       return true;
     };
 
@@ -757,7 +786,24 @@ function App() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
+  const advanceCardInput = useCallback(() => {
+    if (currentStep.id !== "notinha") return false;
+
+    const activeField = CARD_FIELDS[closing.cardIndex];
+    const activeFocusKey = document.activeElement?.dataset?.moneyFocus || lastMoneyFocusRef.current || "";
+    const sourceIndex = activeField.sources.findIndex((_, index) => activeFocusKey === `card-${activeField.key}-${index}`);
+
+    if (sourceIndex >= 0 && sourceIndex < activeField.sources.length - 1) {
+      focusMoneyField(`card-${activeField.key}-${sourceIndex + 1}`);
+      return true;
+    }
+
+    return false;
+  }, [closing.cardIndex, currentStep.id, focusMoneyField]);
+
   const nextStep = useCallback(() => {
+    if (advanceCardInput()) return;
+
     if (currentStep.id === "notinha" && closing.cardIndex < CARD_FIELDS.length - 1) {
       const nextField = CARD_FIELDS[closing.cardIndex + 1];
       pendingMoneyFocusRef.current = `card-${nextField.key}-0`;
@@ -780,7 +826,7 @@ function App() {
       pendingMoneyFocusRef.current = "venda-produtos";
     }
     goToStep(closing.step + 1);
-  }, [closing.cardIndex, closing.extraIndex, closing.step, currentStep.id, focusMoneyField, goToStep]);
+  }, [advanceCardInput, closing.cardIndex, closing.extraIndex, closing.step, currentStep.id, focusMoneyField, goToStep]);
 
   const previousStep = useCallback(() => {
     if (currentStep.id === "notinha" && closing.cardIndex > 0) {
@@ -839,6 +885,7 @@ function App() {
     async (status = "salvo") => {
       const payload = {
         ...closing,
+        comprovantes: normalizeComprovantes(comprovantes),
         status,
         savedAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
@@ -849,7 +896,7 @@ function App() {
       refreshHistory();
       setMessage(status === "concluido" ? "Fechamento concluido e salvo offline." : "Fechamento salvo offline.");
     },
-    [closing, refreshHistory]
+    [closing, comprovantes, refreshHistory]
   );
 
   const fillExample = useCallback(() => {
@@ -1042,7 +1089,11 @@ function App() {
   }, []);
 
   const updateComprovantes = useCallback((patch) => {
-    setComprovantes((prev) => ({ ...prev, ...patch }));
+    setComprovantes((prev) => {
+      const next = normalizeComprovantes({ ...prev, ...patch });
+      setClosing((current) => ({ ...current, comprovantes: next, updatedAt: new Date().toISOString() }));
+      return next;
+    });
   }, []);
 
   const removeAttachment = useCallback((id) => {
@@ -1055,15 +1106,19 @@ function App() {
   }, []);
 
   const loadFromHistory = useCallback((item) => {
-    setClosing(normalizeClosing(item));
+    const normalized = normalizeClosing(item);
+    setClosing(normalized);
+    setComprovantes(normalized.comprovantes);
     setMessage("Fechamento aberto para revisao.");
     setCurrentView("form");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
   const duplicateClosing = useCallback((item) => {
+    const normalized = normalizeClosing(item);
+    setComprovantes(normalized.comprovantes);
     setClosing({
-      ...normalizeClosing(item),
+      ...normalized,
       id: createId(),
       status: "rascunho",
       savedAt: "",
@@ -1130,6 +1185,7 @@ function App() {
     try {
       const importedClosing = validateQrPayloadText(text);
       setClosing(importedClosing);
+      setComprovantes(normalizeComprovantes(importedClosing.comprovantes));
       setCurrentView("form");
       setQrScannerOpen(false);
       setMessage("Fechamento importado por QR Code. Revise e edite antes de salvar.");
@@ -1257,6 +1313,10 @@ function App() {
           closing={closing}
           totals={totals}
           onCardValue={updateCardValue}
+          onNextField={nextStep}
+          onMoneyFocus={(focusKey) => {
+            lastMoneyFocusRef.current = focusKey;
+          }}
           onAttach={attachAndScan}
           onRemoveAttachment={removeAttachment}
           onFillExample={fillExample}
@@ -1430,6 +1490,8 @@ function NotinhaStep({
   closing,
   totals,
   onCardValue,
+  onNextField,
+  onMoneyFocus,
   onAttach,
   onRemoveAttachment,
   onFillExample,
@@ -1550,6 +1612,8 @@ function NotinhaStep({
           activeKey={activeField.key}
           cards={closing.cards}
           onCardValue={onCardValue}
+          onNextField={onNextField}
+          onMoneyFocus={onMoneyFocus}
         />
       ))}
 
@@ -1561,7 +1625,7 @@ function NotinhaStep({
   );
 }
 
-function CardGroupSection({ group, activeKey, cards, onCardValue }) {
+function CardGroupSection({ group, activeKey, cards, onCardValue, onNextField, onMoneyFocus }) {
   return (
     <section className="payment-section">
       <h3>{group.title}</h3>
@@ -1574,6 +1638,8 @@ function CardGroupSection({ group, activeKey, cards, onCardValue }) {
             total={getCardFieldTotal({ cards }, field.key)}
             active={field.key === activeKey}
             onChange={(index, value) => onCardValue(field.key, index, value)}
+            onNextField={onNextField}
+            onMoneyFocus={onMoneyFocus}
           />
         ))}
       </div>
@@ -1790,7 +1856,7 @@ function ResumoStep({ closing, history, totals, summary, onCopy, onCsv, onPrint,
   );
 }
 
-function FinalField({ field, values, total, onChange, active = false }) {
+function FinalField({ field, values, total, onChange, onNextField, onMoneyFocus, active = false }) {
   return (
     <article className={`final-field ${active ? "active" : ""}`}>
       <div className="final-field-head">
@@ -1809,6 +1875,8 @@ function FinalField({ field, values, total, onChange, active = false }) {
             label={source}
             value={values[index] || ""}
             onChange={(value) => onChange(index, value)}
+            onNextField={onNextField}
+            onFocus={onMoneyFocus}
             focusKey={`card-${field.key}-${index}`}
           />
         ))}
@@ -1817,7 +1885,7 @@ function FinalField({ field, values, total, onChange, active = false }) {
   );
 }
 
-function MoneyInput({ label, value, onChange, autoFocus = false, focusKey = "" }) {
+function MoneyInput({ label, value, onChange, onNextField, onFocus, autoFocus = false, focusKey = "" }) {
   return (
     <label className="money-input">
       <span>{label}</span>
@@ -1838,6 +1906,14 @@ function MoneyInput({ label, value, onChange, autoFocus = false, focusKey = "" }
           value={value}
           placeholder="0,00"
           onChange={(event) => onChange(event.target.value)}
+          onFocus={() => {
+            if (focusKey) onFocus?.(focusKey);
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" || !onNextField) return;
+            event.preventDefault();
+            onNextField();
+          }}
         />
       </div>
     </label>
